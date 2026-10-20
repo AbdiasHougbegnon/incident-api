@@ -7,10 +7,13 @@ import fr.abdias.incident_api.model.IncidentStatus;
 import fr.abdias.incident_api.repository.IncidentRepository;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
+import fr.abdias.incident_api.exception.IncidentNotFoundException;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import java.util.Optional;
 
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import java.util.List;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -72,4 +75,36 @@ class IncidentServiceTest {
         assertThat(result).containsExactly(first, second);
         verify(incidentRepository).findAll();
     }
+
+    
+    @Test
+    void shouldReturnIncidentWhenIdExists() {
+        Incident incident = Incident.builder()
+                .title("Panne réseau")
+                .description("Connexion indisponible.")
+                .status(IncidentStatus.OPEN)
+                .priority(IncidentPriority.HIGH)
+                .build();
+
+        when(incidentRepository.findById(1L))
+                .thenReturn(Optional.of(incident));
+
+        Incident result = incidentService.getIncidentById(1L);
+
+        assertThat(result).isSameAs(incident);
+        verify(incidentRepository).findById(1L);
+    }
+
+    @Test
+    void shouldThrowExceptionWhenIncidentDoesNotExist() {
+        when(incidentRepository.findById(99L))
+                .thenReturn(Optional.empty());
+
+        assertThatThrownBy(() -> incidentService.getIncidentById(99L))
+                .isInstanceOf(IncidentNotFoundException.class)
+                .hasMessage("Incident introuvable avec l'identifiant : 99");
+
+        verify(incidentRepository).findById(99L);
+    }
+
 }
