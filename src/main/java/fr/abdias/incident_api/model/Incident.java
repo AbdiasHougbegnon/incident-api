@@ -4,6 +4,8 @@ import jakarta.persistence.*;
 import lombok.*;
 
 import java.time.LocalDateTime;
+import jakarta.validation.constraints.NotBlank;
+import jakarta.validation.constraints.Size;
 
 @Entity
 @Table(name = "incidents")
@@ -18,11 +20,17 @@ public class Incident {
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
 
+    @NotBlank(message = "Le titre est obligatoire.")
+    @Size(max = 150, message = "Le titre ne doit pas dépasser 150 caractères.")
     @Column(nullable = false, length = 150)
     private String title;
 
+    @NotBlank(message = "La description est obligatoire.")
+    @Size(max = 2000, message = "La description ne doit pas dépasser 2000 caractères.")
     @Column(nullable = false, length = 2000)
     private String description;
+ 
+
 
     @Enumerated(EnumType.STRING)
     @Column(nullable = false)

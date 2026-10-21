@@ -26,6 +26,8 @@ dependencies {
 	compileOnly("org.projectlombok:lombok")
 	developmentOnly("org.springframework.boot:spring-boot-devtools")
 	runtimeOnly("com.h2database:h2")
+	implementation("org.springframework.boot:spring-boot-starter-hateoas")
+	implementation("org.springdoc:springdoc-openapi-starter-webmvc-ui:3.0.0")
 	annotationProcessor("org.projectlombok:lombok")
 	testImplementation("org.springframework.boot:spring-boot-starter-data-jpa-test")
 	testImplementation("org.springframework.boot:spring-boot-starter-data-rest-test")
