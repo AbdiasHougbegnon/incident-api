@@ -107,4 +107,65 @@ class IncidentServiceTest {
         verify(incidentRepository).findById(99L);
     }
 
+        @Test
+    void shouldUpdateIncident() {
+        Incident existingIncident = Incident.builder()
+                .id(1L)
+                .title("Ancien titre")
+                .description("Ancienne description")
+                .status(IncidentStatus.OPEN)
+                .priority(IncidentPriority.LOW)
+                .build();
+
+        Incident updatedIncident = Incident.builder()
+                .title("Nouveau titre")
+                .description("Nouvelle description")
+                .status(IncidentStatus.RESOLVED)
+                .priority(IncidentPriority.HIGH)
+                .build();
+
+        when(incidentRepository.findById(1L))
+                .thenReturn(Optional.of(existingIncident));
+        when(incidentRepository.save(existingIncident))
+                .thenReturn(existingIncident);
+
+        Incident result = incidentService.updateIncident(1L, updatedIncident);
+
+        assertThat(result.getTitle()).isEqualTo("Nouveau titre");
+        assertThat(result.getDescription()).isEqualTo("Nouvelle description");
+        assertThat(result.getStatus()).isEqualTo(IncidentStatus.RESOLVED);
+        assertThat(result.getPriority()).isEqualTo(IncidentPriority.HIGH);
+
+        verify(incidentRepository).save(existingIncident);
+    }
+
+    @Test
+    void shouldDeleteIncident() {
+        Incident incident = Incident.builder()
+                .id(1L)
+                .title("Incident à supprimer")
+                .description("Description")
+                .status(IncidentStatus.OPEN)
+                .priority(IncidentPriority.MEDIUM)
+                .build();
+
+        when(incidentRepository.findById(1L))
+                .thenReturn(Optional.of(incident));
+
+        incidentService.deleteIncident(1L);
+
+        verify(incidentRepository).delete(incident);
+    }
+
+    @Test
+    void shouldThrowExceptionWhenDeletingNonExistingIncident() {
+        when(incidentRepository.findById(99L))
+                .thenReturn(Optional.empty());
+
+        assertThatThrownBy(() -> incidentService.deleteIncident(99L))
+                .isInstanceOf(IncidentNotFoundException.class);
+
+        verify(incidentRepository, never()).delete(any(Incident.class));
+    }
+
 }
