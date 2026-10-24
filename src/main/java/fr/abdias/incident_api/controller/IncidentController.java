@@ -7,6 +7,8 @@ import org.springframework.http.HttpStatus;
 import org.springframework.web.bind.annotation.*;
 import jakarta.validation.Valid;
 import java.util.List;
+import org.springframework.web.bind.annotation.PutMapping;
+import org.springframework.web.bind.annotation.DeleteMapping;
 
 @RestController
 @RequestMapping("/api/incidents")
@@ -32,5 +34,18 @@ public class IncidentController {
     @GetMapping("/{id}")
     public Incident getIncidentById(@PathVariable Long id) {
         return incidentService.getIncidentById(id);
+    }
+
+    @PutMapping("/{id}")
+    public Incident updateIncident(
+            @PathVariable Long id,
+            @Valid @RequestBody Incident updatedIncident) {
+        return incidentService.updateIncident(id, updatedIncident);
+    }
+
+    @DeleteMapping("/{id}")
+    @ResponseStatus(HttpStatus.NO_CONTENT)
+    public void deleteIncident(@PathVariable Long id) {
+        incidentService.deleteIncident(id);
     }
 }

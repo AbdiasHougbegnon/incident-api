@@ -32,4 +32,20 @@ public Incident getIncidentById(Long id) {
     return incidentRepository.findById(id)
             .orElseThrow(() -> new IncidentNotFoundException(id));
 }
+
+public Incident updateIncident(Long id, Incident updatedIncident) {
+    Incident existingIncident = getIncidentById(id);
+
+    existingIncident.setTitle(updatedIncident.getTitle());
+    existingIncident.setDescription(updatedIncident.getDescription());
+    existingIncident.setStatus(updatedIncident.getStatus());
+    existingIncident.setPriority(updatedIncident.getPriority());
+
+    return incidentRepository.save(existingIncident);
+}
+
+public void deleteIncident(Long id) {
+    Incident incident = getIncidentById(id);
+    incidentRepository.delete(incident);
+}
 }
