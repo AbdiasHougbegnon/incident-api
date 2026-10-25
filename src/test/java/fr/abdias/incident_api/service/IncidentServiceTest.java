@@ -168,4 +168,29 @@ class IncidentServiceTest {
         verify(incidentRepository, never()).delete(any(Incident.class));
     }
 
+    
+@Test
+void shouldThrowExceptionWhenUpdatingNonExistingIncident() {
+    // Arrange
+    Incident updatedIncident = Incident.builder()
+            .title("Nouveau titre")
+            .description("Nouvelle description")
+            .status(IncidentStatus.RESOLVED)
+            .priority(IncidentPriority.HIGH)
+            .build();
+
+    when(incidentRepository.findById(99L))
+            .thenReturn(Optional.empty());
+
+    // Act & Assert
+    assertThatThrownBy(
+            () -> incidentService.updateIncident(99L, updatedIncident))
+            .isInstanceOf(IncidentNotFoundException.class)
+            .hasMessage("Incident introuvable avec l'identifiant : 99");
+
+    // Vérifier qu'aucune sauvegarde n'a eu lieu
+    verify(incidentRepository, never()).save(any(Incident.class));
+}
+
+
 }
