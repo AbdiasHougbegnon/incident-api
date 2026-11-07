@@ -1,17 +1,20 @@
 # Incident API
 
-API REST de gestion des incidents informatiques développée avec Java et Spring Boot. Elle permet de créer, consulter, modifier et supprimer des incidents, ainsi que de gérer l'inscription et l'authentification des utilisateurs avec des jetons JWT.
+API REST de gestion des incidents informatiques développée avec Java et Spring Boot. Elle permet de créer, consulter, modifier et supprimer des incidents, avec authentification JWT, gestion des rôles et propriété des incidents.
 
 ## Fonctionnalités
 
-- Gestion des incidents : création, consultation, modification et suppression.
-- Authentification par JWT (JSON Web Token).
+- Gestion des incidents : création, consultation (paginée et filtrable), modification et suppression.
+- Authentification par JWT (JSON Web Token), rôles `ADMIN` / `USER`.
+- Propriété des incidents : seul le créateur (`reporter`) d'un incident ou un `ADMIN` peut le modifier ou le supprimer. La lecture reste ouverte à tout utilisateur authentifié.
 - Inscription des utilisateurs et hachage des mots de passe avec BCrypt.
+- Limitation de débit (rate limiting) sur les routes d'authentification.
 - Validation des données entrantes.
-- Gestion centralisée des erreurs.
-- Migrations de base de données avec Flyway.
-- Documentation interactive de l'API avec OpenAPI et Swagger UI.
+- Gestion centralisée des erreurs au format `ProblemDetail` (RFC 7807).
+- Migrations de base de données avec Flyway (PostgreSQL).
+- Documentation interactive de l'API avec OpenAPI et Swagger UI (désactivable en production).
 - Tests automatisés et mesure de couverture avec JaCoCo.
+- Conteneurisation avec Docker et docker-compose.
 
 ## Technologies
 
@@ -22,77 +25,63 @@ API REST de gestion des incidents informatiques développée avec Java et Spring
 - Spring Data JPA
 - Spring Security et OAuth2 Resource Server
 - JWT et BCrypt
-- H2 Database
+- PostgreSQL (H2 en mémoire pour les tests uniquement)
 - Flyway
 - Lombok
 - SpringDoc OpenAPI
 - JUnit et Mockito
 - JaCoCo
+- Docker / docker-compose
 
-## Prérequis
+## Démarrage rapide avec Docker
 
-Avant de lancer le projet, installer :
-
-- Un JDK compatible avec Java 25.
-- Git, si le projet est récupéré depuis un dépôt.
-- Un terminal PowerShell sous Windows, ou un terminal compatible avec Gradle Wrapper.
-
-## Installation
-
-Cloner le dépôt :
+C'est la méthode recommandée pour lancer le projet en local.
 
 ```bash
-git clone <URL_DU_DEPOT>
-cd incident-api
+cp .env.example .env
+# Éditer .env : définir DB_PASSWORD, JWT_SECRET, et optionnellement ADMIN_EMAIL/ADMIN_PASSWORD
+docker-compose up --build
 ```
 
-La commande de clonage suppose que le dépôt distant est nommé `incident-api`. Adapter l'URL et le nom du dossier si nécessaire.
+L'application démarre sur `http://localhost:8080` avec une base PostgreSQL persistée dans un volume Docker.
 
-## Configuration
-
-L'application utilise une variable d'environnement pour la clé secrète JWT.
-
-La propriété attendue dans `application.properties` est :
-
-```properties
-security.jwt.secret=${JWT_SECRET}
-```
-
-Sous Windows PowerShell, générer une clé aléatoire de 32 octets encodée en Base64 :
+Générer une clé `JWT_SECRET` valide (32 octets minimum, encodée en Base64) :
 
 ```powershell
 $rng = [System.Security.Cryptography.RandomNumberGenerator]::Create()
 $bytes = New-Object byte[] 32
 $rng.GetBytes($bytes)
 $rng.Dispose()
-
-$env:JWT_SECRET = [Convert]::ToBase64String($bytes)
+[Convert]::ToBase64String($bytes)
 ```
 
-Cette variable est définie uniquement dans la session PowerShell en cours. Il faut la définir à nouveau dans toute nouvelle session ou configurer le secret dans l'environnement d'exécution.
+### Compte administrateur initial
 
-Ne jamais publier la clé secrète dans le dépôt Git.
+Si les variables d'environnement `ADMIN_EMAIL` et `ADMIN_PASSWORD` sont définies et qu'aucun compte `ADMIN` n'existe encore, un compte administrateur est créé automatiquement au démarrage de l'application (une seule fois, de façon idempotente).
 
-## Lancement en développement
+## Démarrage sans Docker
 
-Depuis la racine du projet :
+Nécessite un JDK 25 et une instance PostgreSQL accessible.
 
 ```powershell
+$env:DB_URL = "jdbc:postgresql://localhost:5432/incidentdb"
+$env:DB_USERNAME = "incident"
+$env:DB_PASSWORD = "..."
+$env:JWT_SECRET = "..."
+
 .\gradlew bootRun
 ```
 
-L'application utilise actuellement une base H2 en mémoire configurée dans `application.properties`.
-
-Les données de cette base sont temporaires et ne constituent pas une solution de persistance adaptée à une production durable.
+Ces variables ne sont définies que dans la session PowerShell en cours. Ne jamais publier de secret dans le dépôt Git (voir `.env.example`).
 
 ## Documentation OpenAPI
 
-Lorsque l'application est démarrée, les interfaces suivantes sont normalement disponibles :
+Lorsque l'application est démarrée (hors profil `prod`) :
 
 - Swagger UI : `http://localhost:8080/swagger-ui/index.html`
 - Document OpenAPI JSON : `http://localhost:8080/v3/api-docs`
 
-Les endpoints de documentation sont configurés pour être accessibles sans authentification.
+En production, activer le profil `prod` (`SPRING_PROFILES_ACTIVE=prod`) désactive ces endpoints pour ne pas exposer publiquement la structure de l'API.
 
 ## Authentification
 
@@ -100,8 +89,6 @@ Les endpoints de documentation sont configurés pour être accessibles sans auth
 
 `POST /api/auth/register`
 
-Exemple de requête :
-
 ```json
 {
   "email": "utilisateur@example.com",
@@ -109,20 +96,14 @@ Exemple de requête :
 }
 ```
 
-Réponses principales :
+Réponses principales : `201 Created`, `400 Bad Request`, `409 Conflict` (e-mail déjà utilisé).
 
-- `201 Created` : compte créé.
-- `400 Bad Request` : données invalides.
-- `409 Conflict` : adresse e-mail déjà utilisée.
-
-L'inscription crée un utilisateur avec le rôle par défaut `ROLE_USER`.
+L'inscription crée un utilisateur avec le rôle par défaut `USER`.
 
 ### Connexion
 
 `POST /api/auth/login`
 
-Exemple de requête :
-
 ```json
 {
   "email": "utilisateur@example.com",
@@ -130,13 +111,7 @@ Exemple de requête :
 }
 ```
 
-Réponses principales :
-
-- `200 OK` : authentification réussie et jeton JWT retourné.
-- `400 Bad Request` : données invalides.
-- `401 Unauthorized` : identifiants incorrects.
-
-Exemple de réponse :
+Réponses principales : `200 OK` (jeton JWT retourné), `400 Bad Request`, `401 Unauthorized`.
 
 ```json
 {
@@ -145,23 +120,40 @@ Exemple de réponse :
 }
 ```
 
-Le jeton doit être envoyé dans l'en-tête HTTP des requêtes protégées :
-
 ```http
 Authorization: Bearer <JWT>
 ```
+
+Les routes `/api/auth/**` sont limitées à ~10 requêtes par minute et par adresse IP (protection anti brute-force). Au-delà, l'API répond `429 Too Many Requests`. Cette limitation est en mémoire et par instance : un déploiement multi-instance nécessiterait un store partagé (ex. Redis).
 
 ## Gestion des incidents
 
 Toutes les routes suivantes nécessitent une authentification.
 
-| Méthode | Endpoint | Description | Réponses principales |
+| Méthode | Endpoint | Description | Autorisation |
 |---|---|---|---|
-| `POST` | `/api/incidents` | Créer un incident | `201`, `400` |
-| `GET` | `/api/incidents` | Lister les incidents | `200` |
-| `GET` | `/api/incidents/{id}` | Consulter un incident | `200`, `404` |
-| `PUT` | `/api/incidents/{id}` | Modifier un incident | `200`, `400`, `404` |
-| `DELETE` | `/api/incidents/{id}` | Supprimer un incident | `204`, `404` |
+| `POST` | `/api/incidents` | Créer un incident (le créateur devient le `reporter`) | Tout utilisateur authentifié |
+| `GET` | `/api/incidents` | Lister les incidents (paginé, filtrable) | Tout utilisateur authentifié |
+| `GET` | `/api/incidents/{id}` | Consulter un incident | Tout utilisateur authentifié |
+| `PUT` | `/api/incidents/{id}` | Modifier un incident | Propriétaire (`reporter`) ou `ADMIN` |
+| `DELETE` | `/api/incidents/{id}` | Supprimer un incident | Propriétaire (`reporter`) ou `ADMIN` |
+
+Une tentative de modification/suppression par un utilisateur non autorisé renvoie `403 Forbidden`.
+
+### Pagination et filtrage
+
+`GET /api/incidents` accepte les paramètres :
+
+- `page`, `size`, `sort` (standard Spring Data, défaut : `size=20`, tri par `createdAt` décroissant).
+- `status` (optionnel, ex. `OPEN`).
+- `priority` (optionnel, ex. `CRITICAL`).
+
+```bash
+curl -H "Authorization: Bearer <JWT>" \
+     "http://localhost:8080/api/incidents?page=0&size=10&status=OPEN"
+```
+
+La réponse est un objet paginé Spring Data (`content`, `page.size`, `page.totalElements`, etc.).
 
 ### Exemple de création d'incident
 
@@ -176,110 +168,46 @@ Toutes les routes suivantes nécessitent une authentification.
 }
 ```
 
-Les valeurs de `status` et de `priority` doivent correspondre aux constantes définies dans les énumérations du projet.
-
-### Exemple de modification
-
-`PUT /api/incidents/1`
-
-```json
-{
-  "title": "Serveur rétabli",
-  "description": "Le serveur est de nouveau accessible.",
-  "status": "RESOLVED",
-  "priority": "HIGH"
-}
-```
-
-Adapter les valeurs des énumérations aux constantes réellement disponibles dans le code.
-
-### Exemple avec curl
-
-```bash
-curl -H "Authorization: Bearer <JWT>" \
-     http://localhost:8080/api/incidents
-```
+Les valeurs de `status` (`OPEN`, `IN_PROGRESS`, `RESOLVED`, `CLOSED`) et de `priority` (`LOW`, `MEDIUM`, `HIGH`, `CRITICAL`) doivent correspondre aux énumérations du projet.
 
 ## Base de données et migrations
 
-Le projet utilise H2 et Flyway.
+Le projet utilise PostgreSQL en exécution et Flyway pour les migrations.
 
-Les migrations SQL se trouvent dans :
+Les tests (`@DataJpaTest`, `@SpringBootTest`) s'exécutent sur une base H2 embarquée, remplacée automatiquement par Spring Boot — H2 n'est présent que dans les dépendances de test.
 
-```text
-src/main/resources/db/migration/
-```
-
-Migrations présentes :
+Les migrations SQL se trouvent dans `src/main/resources/db/migration/` :
 
 - `V1__create_incidents_table.sql`
 - `V2__create_app_users_table.sql`
+- `V3__add_incident_reporter.sql`
+- `V4__normalize_app_user_roles.sql`
 
-La configuration actuelle utilise le mode de création de schéma `validate` de Hibernate : le schéma doit correspondre aux entités et aux migrations appliquées.
+La configuration utilise le mode `validate` de Hibernate : le schéma doit correspondre aux entités et aux migrations appliquées.
 
 ## Tests
 
-Exécuter l'ensemble des vérifications :
-
 ```powershell
-.\gradlew check
-```
-
-Exécuter les tests uniquement :
-
-```powershell
-.\gradlew test
-```
-
-Générer le rapport de couverture :
-
-```powershell
+.\gradlew check       # tests + vérifications qualité (couverture Jacoco ≥ 80%)
+.\gradlew test        # tests uniquement
 .\gradlew jacocoTestReport
-```
-
-Le rapport HTML est généré à cet emplacement :
-
-```text
-build/reports/jacoco/test/html/index.html
-```
-
-Ouvrir le rapport sous Windows :
-
-```powershell
 Start-Process .\build\reports\jacoco\test\html\index.html
 ```
 
-Le projet possède une règle JaCoCo exigeant au minimum 80 % de couverture des instructions pour la vérification de qualité.
-
 ## Construction de l'application
-
-Construire l'application exécutable :
 
 ```powershell
 .\gradlew bootJar
-```
-
-Le JAR exécutable est généré dans le dossier `build/libs/`. Utiliser le fichier `incident-api-0.0.1-SNAPSHOT.jar`, et non le fichier suffixé `-plain.jar`.
-
-Pour exécuter le JAR après avoir défini `JWT_SECRET` :
-
-```powershell
 java -jar .\build\libs\incident-api-0.0.1-SNAPSHOT.jar
 ```
 
 ## Sécurité et préparation à la production
 
-Avant un déploiement en production :
-
-- Remplacer H2 en mémoire par une base persistante adaptée au déploiement.
-- Stocker les secrets dans les variables d'environnement ou dans le gestionnaire de secrets de la plateforme.
-- Utiliser HTTPS.
-- Vérifier les règles d'autorisation et la protection de chaque endpoint.
-- Configurer les sauvegardes, les journaux et la surveillance.
-- Vérifier la configuration des migrations Flyway.
+- Les secrets (`JWT_SECRET`, `DB_PASSWORD`, `ADMIN_PASSWORD`) doivent être injectés via variables d'environnement ou un gestionnaire de secrets — jamais commités.
+- Activer le profil `prod` pour désactiver la documentation Swagger publique.
+- Utiliser HTTPS devant l'application (reverse proxy / load balancer).
+- Le rate limiting intégré protège une seule instance ; prévoir un store partagé pour un déploiement distribué.
 - Exécuter `.\gradlew check` avant chaque livraison.
-
-La configuration actuelle est destinée au développement et aux tests. Le déploiement en production nécessite une configuration complémentaire.
 
 ## Structure du projet
 
@@ -294,9 +222,11 @@ src/
 │   │   ├── mapper/
 │   │   ├── model/
 │   │   ├── repository/
+│   │   ├── security/
 │   │   └── service/
 │   └── resources/
 │       ├── application.properties
+│       ├── application-prod.properties
 │       └── db/migration/
 └── test/
     └── java/fr/abdias/incident_api/

@@ -78,6 +78,14 @@ public class Incident {
     )
     private LocalDateTime updatedAt;
 
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "reporter_id")
+    @Schema(
+        description = "Utilisateur ayant créé l'incident",
+        accessMode = Schema.AccessMode.READ_ONLY
+    )
+    private AppUser reporter;
+
     @PrePersist
     protected void onCreate() {
         createdAt = LocalDateTime.now();

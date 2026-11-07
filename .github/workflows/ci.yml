@@ -28,3 +28,6 @@ jobs:
 
       - name: Run tests and quality checks
         run: ./gradlew clean check
+
+      - name: Build Docker image
+        run: docker build -t incident-api:ci .

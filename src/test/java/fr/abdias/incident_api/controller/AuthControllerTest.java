@@ -61,7 +61,7 @@ class AuthControllerTest {
                     }
                     """))
                 .andExpect(status().isConflict())
-                .andExpect(jsonPath("$").value(
+                .andExpect(jsonPath("$.detail").value(
                         "Cette adresse e-mail est déjà utilisée."));
     }
 

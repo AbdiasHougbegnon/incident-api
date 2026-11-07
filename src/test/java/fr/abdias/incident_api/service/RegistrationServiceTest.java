@@ -2,6 +2,7 @@
 package fr.abdias.incident_api.service;
 
 import fr.abdias.incident_api.exception.EmailAlreadyExistsException;
+import fr.abdias.incident_api.model.AppRole;
 import fr.abdias.incident_api.model.AppUser;
 import fr.abdias.incident_api.repository.AppUserRepository;
 
@@ -61,7 +62,7 @@ class RegistrationServiceTest {
 
         assertEquals(normalizedEmail, savedUser.getEmail());
         assertEquals(encodedPassword, savedUser.getPasswordHash());
-        assertEquals("ROLE_USER", savedUser.getRole());
+        assertEquals(AppRole.USER, savedUser.getRole());
 
         verify(passwordEncoder).encode(password);
     }

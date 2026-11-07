@@ -17,6 +17,11 @@ public class IncidentMapper {
                 .priority(incident.getPriority())
                 .createdAt(incident.getCreatedAt())
                 .updatedAt(incident.getUpdatedAt())
+                .reporterEmail(
+                        incident.getReporter() != null
+                                ? incident.getReporter().getEmail()
+                                : null
+                )
                 .build();
     }
 }

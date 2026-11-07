@@ -1,6 +1,7 @@
 
 package fr.abdias.incident_api.service;
 
+import fr.abdias.incident_api.model.AppRole;
 import fr.abdias.incident_api.model.AppUser;
 import fr.abdias.incident_api.repository.AppUserRepository;
 
@@ -45,7 +46,7 @@ class AuthServiceTest {
         AppUser user = new AppUser();
         user.setEmail("abdias.test@example.com");
         user.setPasswordHash("encoded-password");
-        user.setRole("ROLE_USER");
+        user.setRole(AppRole.USER);
 
         when(appUserRepository.findByEmailIgnoreCase(
                 "abdias.test@example.com"))

@@ -34,4 +34,7 @@ public class IncidentResponse {
 
     @Schema(description = "Date de dernière modification")
     private LocalDateTime updatedAt;
+
+    @Schema(description = "Adresse e-mail de l'utilisateur ayant créé l'incident", example = "utilisateur@example.com")
+    private String reporterEmail;
 }

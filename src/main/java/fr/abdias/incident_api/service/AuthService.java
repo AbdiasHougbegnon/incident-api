@@ -45,7 +45,7 @@ public class AuthService {
                 .subject(user.getEmail())
                 .issuedAt(now)
                 .expiresAt(now.plusSeconds(3600))
-                .claim("role", user.getRole())
+                .claim("role", user.getRole().name())
                 .build();
 
         JwsHeader header = JwsHeader.with(

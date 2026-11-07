@@ -3,7 +3,6 @@ package fr.abdias.incident_api.controller;
 
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
-import org.springframework.security.authentication.BadCredentialsException;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
@@ -16,8 +15,6 @@ import fr.abdias.incident_api.service.AuthService;
 import fr.abdias.incident_api.service.RegistrationService;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
-import fr.abdias.incident_api.exception.EmailAlreadyExistsException;
-import org.springframework.web.bind.annotation.ExceptionHandler;
 
 @RestController
 @RequestMapping("/api/auth")
@@ -43,24 +40,11 @@ public class AuthController {
     public ResponseEntity<AuthResponse> login(
             @Valid @RequestBody LoginRequest request) {
 
-        try {
-            String token = authService.authenticate(
-                    request.getEmail(),
-                    request.getPassword()
-            );
+        String token = authService.authenticate(
+                request.getEmail(),
+                request.getPassword()
+        );
 
-            return ResponseEntity.ok(new AuthResponse(token));
-
-        } catch (BadCredentialsException exception) {
-            return ResponseEntity.status(HttpStatus.UNAUTHORIZED).build();
-        }
+        return ResponseEntity.ok(new AuthResponse(token));
     }
-    @ExceptionHandler(EmailAlreadyExistsException.class)
-public ResponseEntity<String> handleEmailAlreadyExists(
-        EmailAlreadyExistsException exception) {
-
-    return ResponseEntity
-            .status(HttpStatus.CONFLICT)
-            .body(exception.getMessage());
-}
 }

@@ -7,6 +7,7 @@ import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import fr.abdias.incident_api.model.AppRole;
 import fr.abdias.incident_api.model.AppUser;
 import fr.abdias.incident_api.repository.AppUserRepository;
 import lombok.RequiredArgsConstructor;
@@ -30,7 +31,7 @@ public class RegistrationService {
         AppUser user = new AppUser();
         user.setEmail(normalizedEmail);
         user.setPasswordHash(passwordEncoder.encode(password));
-        user.setRole("ROLE_USER");
+        user.setRole(AppRole.USER);
 
         appUserRepository.save(user);
     }
