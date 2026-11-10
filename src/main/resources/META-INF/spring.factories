@@ -1,0 +1,2 @@
+org.springframework.boot.env.EnvironmentPostProcessor=\
+fr.abdias.incident_api.config.VaultEnvironmentPostProcessor

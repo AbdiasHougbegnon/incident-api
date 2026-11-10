@@ -11,8 +11,13 @@ API REST de gestion des incidents informatiques développée avec Java et Spring
 - Limitation de débit (rate limiting) sur les routes d'authentification.
 - Validation des données entrantes.
 - Gestion centralisée des erreurs au format `ProblemDetail` (RFC 7807).
+- Déconnexion (`/api/auth/logout`) avec révocation effective du jeton courant.
 - Migrations de base de données avec Flyway (PostgreSQL).
 - Documentation interactive de l'API avec OpenAPI et Swagger UI (désactivable en production).
+- Observabilité : endpoints Spring Actuator (santé, métriques, Prometheus), logs structurés en JSON.
+- Sauvegardes automatiques et planifiées de la base PostgreSQL.
+- Secrets gérés via HashiCorp Vault (mode développement).
+- Script de test de charge (k6).
 - Tests automatisés et mesure de couverture avec JaCoCo.
 - Conteneurisation avec Docker et docker-compose.
 
@@ -31,6 +36,9 @@ API REST de gestion des incidents informatiques développée avec Java et Spring
 - SpringDoc OpenAPI
 - JUnit et Mockito
 - JaCoCo
+- Spring Boot Actuator / Micrometer (Prometheus)
+- HashiCorp Vault
+- k6 (tests de charge)
 - Docker / docker-compose
 
 ## Démarrage rapide avec Docker
@@ -39,11 +47,19 @@ C'est la méthode recommandée pour lancer le projet en local.
 
 ```bash
 cp .env.example .env
-# Éditer .env : définir DB_PASSWORD, JWT_SECRET, et optionnellement ADMIN_EMAIL/ADMIN_PASSWORD
+# Éditer .env : définir DB_PASSWORD, JWT_SECRET, VAULT_DEV_ROOT_TOKEN,
+# et optionnellement ADMIN_EMAIL/ADMIN_PASSWORD
 docker-compose up --build
 ```
 
 L'application démarre sur `http://localhost:8080` avec une base PostgreSQL persistée dans un volume Docker.
+
+Au démarrage, la stack lance aussi :
+- **`vault`** : un serveur HashiCorp Vault en mode développement, qui stocke les secrets (`DB_PASSWORD`, `JWT_SECRET`, `ADMIN_EMAIL`, `ADMIN_PASSWORD`).
+- **`vault-init`** : un conteneur qui s'exécute une seule fois pour écrire ces secrets dans Vault (`secret/incident-api`), à partir de ton fichier `.env`.
+- **`postgres-backup`** : un conteneur qui sauvegarde la base PostgreSQL toutes les 24h.
+
+Le service `app` ne lit **plus** `DB_PASSWORD`/`JWT_SECRET`/`ADMIN_EMAIL`/`ADMIN_PASSWORD` directement dans son environnement : il les récupère auprès de Vault au démarrage (voir [Gestion des secrets](#gestion-des-secrets-avec-hashicorp-vault)). `docker compose up` attend donc que `vault-init` ait terminé avant de démarrer `app`.
 
 Générer une clé `JWT_SECRET` valide (32 octets minimum, encodée en Base64) :
 
@@ -73,6 +89,29 @@ $env:JWT_SECRET = "..."
 ```
 
 Ces variables ne sont définies que dans la session PowerShell en cours. Ne jamais publier de secret dans le dépôt Git (voir `.env.example`).
+
+Sans `VAULT_ADDR`/`VAULT_TOKEN` définis, l'application ignore totalement Vault et lit les secrets directement dans les variables d'environnement, comme ci-dessus — pratique pour développer sans lancer toute la stack Docker.
+
+## Gestion des secrets avec HashiCorp Vault
+
+En conteneur (`docker-compose`), les secrets ne sont plus transmis en clair à l'application : ils sont stockés dans Vault, et l'application va les chercher elle-même au tout début de son démarrage.
+
+**Comment ça fonctionne** : une classe `VaultEnvironmentPostProcessor` (`EnvironmentPostProcessor` Spring Boot) s'exécute avant la création de tout bean. Si `VAULT_ADDR` et `VAULT_TOKEN` sont présents dans l'environnement, elle appelle `GET {VAULT_ADDR}/v1/secret/data/incident-api` (API HTTP de Vault, via `java.net.http.HttpClient` — aucune dépendance supplémentaire) et injecte le résultat comme source de propriétés prioritaire, sous les mêmes noms que les variables d'environnement habituelles (`DB_PASSWORD`, `JWT_SECRET`, `ADMIN_EMAIL`, `ADMIN_PASSWORD`). Si Vault est injoignable ou que ces variables sont absentes, l'application se comporte exactement comme avant (fallback silencieux, avec un simple avertissement dans les logs).
+
+**Inspecter les secrets stockés** (utile pour déboguer) :
+
+```bash
+docker compose exec vault vault kv get secret/incident-api
+```
+
+### ⚠️ Le mode "dev" de Vault n'est pas sécurisé pour une vraie production
+
+Le conteneur `vault` tourne en **mode développement** (`hashicorp/vault` avec `VAULT_DEV_ROOT_TOKEN_ID`) :
+- **stockage en mémoire** — tout disparaît si le conteneur redémarre (pas un problème ici puisque `vault-init` réécrit les secrets à chaque démarrage de la stack, mais inacceptable en vraie prod) ;
+- **déverrouillage automatique** — en prod, Vault doit être "unsealed" manuellement (ou via un auto-unseal KMS cloud) avec des parts de clé Shamir, justement pour qu'aucune personne seule ne puisse déverrouiller le coffre ;
+- **jeton root fixe, sans TLS** — en prod, l'authentification doit utiliser une méthode à privilège limité (AppRole, Kubernetes auth...) plutôt qu'un jeton root permanent, et toutes les communications doivent être chiffrées (TLS).
+
+Pour une vraie mise en production : un backend de stockage persistant (Raft intégré, ou Consul), un vrai processus de scellement/déverrouillage, l'authentification AppRole, et TLS de bout en bout. C'est un projet à part entière, pas une simple option à activer.
 
 ## Documentation OpenAPI
 
@@ -124,7 +163,20 @@ Réponses principales : `200 OK` (jeton JWT retourné), `400 Bad Request`, `401 
 Authorization: Bearer <JWT>
 ```
 
-Les routes `/api/auth/**` sont limitées à ~10 requêtes par minute et par adresse IP (protection anti brute-force). Au-delà, l'API répond `429 Too Many Requests`. Cette limitation est en mémoire et par instance : un déploiement multi-instance nécessiterait un store partagé (ex. Redis).
+Les routes `/api/auth/**` sont limitées à ~10 requêtes par minute et par adresse IP (protection anti brute-force). Au-delà, l'API répond `429 Too Many Requests`. Cette limitation est en mémoire et par instance : avec une seule instance de l'application (le cas aujourd'hui), c'est suffisant. **Si l'application est un jour déployée sur plusieurs instances** derrière un load balancer, ce filtre doit être remplacé par un compteur partagé (ex. Redis avec `INCR`/`EXPIRE`), sinon chaque instance a sa propre limite et un attaquant peut la contourner en répartissant ses requêtes.
+
+### Déconnexion
+
+`POST /api/auth/logout` (authentification requise)
+
+Révoque le jeton JWT utilisé pour cet appel : son identifiant unique (`jti`) est enregistré dans une liste de révocation en base. Toute requête ultérieure avec ce même jeton est rejetée (`401`), même s'il n'est pas encore expiré. Les entrées expirées sont purgées automatiquement chaque nuit à 3h.
+
+```bash
+curl -X POST http://localhost:8080/api/auth/logout \
+     -H "Authorization: Bearer <JWT>"
+```
+
+Réponse : `204 No Content`.
 
 ## Gestion des incidents
 
@@ -170,6 +222,56 @@ La réponse est un objet paginé Spring Data (`content`, `page.size`, `page.tota
 
 Les valeurs de `status` (`OPEN`, `IN_PROGRESS`, `RESOLVED`, `CLOSED`) et de `priority` (`LOW`, `MEDIUM`, `HIGH`, `CRITICAL`) doivent correspondre aux énumérations du projet.
 
+## Observabilité
+
+L'application expose des endpoints [Spring Boot Actuator](https://docs.spring.io/spring-boot/reference/actuator/index.html) :
+
+| Endpoint | Accès | Contenu |
+|---|---|---|
+| `GET /actuator/health` | Public | État global (`UP`/`DOWN`) uniquement |
+| `GET /actuator/health` (avec un JWT `ADMIN`) | `ADMIN` | Détail par composant (base de données, disque...) |
+| `GET /actuator/info` | Public | Nom et version de build de l'application |
+| `GET /actuator/metrics` | `ADMIN` | Métriques JVM/HTTP (mémoire, threads, temps de réponse...) |
+| `GET /actuator/prometheus` | `ADMIN` | Les mêmes métriques, au format que Prometheus sait scraper |
+
+Les détails de santé et les métriques ne sont volontairement pas publics : ils peuvent révéler des informations internes (versions, chemins, état de la base) à un attaquant non authentifié.
+
+Les logs sont émis en JSON structuré sur la sortie standard (`logging.structured.format.console=logstash`), directement exploitables par un outil centralisé (ELK, Loki, Datadog...) sans configuration supplémentaire.
+
+## Sauvegardes de la base de données
+
+Le service `postgres-backup` (voir `docker-compose.yml`) exécute `pg_dump` toutes les 24h et conserve les sauvegardes 7 jours (variable `RETENTION_DAYS`, voir `backup/backup.sh`), dans le volume Docker `pgbackups`.
+
+Lister les sauvegardes disponibles :
+
+```bash
+docker compose exec postgres-backup ls -la /backups
+```
+
+Restaurer une sauvegarde :
+
+```bash
+docker compose exec -T postgres pg_restore -U incident -d incidentdb --clean < nom_du_fichier.dump
+```
+
+C'est une solution minimale adaptée à un environnement de démo/développement. Une vraie production s'appuierait plutôt sur les sauvegardes automatiques du service managé (ex. RDS, Cloud SQL) ou un outil dédié (WAL-G, pgBackRest) avec stockage hors-site (S3...).
+
+## Tests de charge
+
+Un script [k6](https://k6.io/) (`loadtest/scenario.js`) simule 10 utilisateurs simultanés pendant 30 secondes, enchaînant inscription, connexion, création d'incident, liste paginée et consultation.
+
+```bash
+# Avec k6 installé localement
+k6 run loadtest/scenario.js
+
+# Ou via l'image Docker officielle, sans rien installer
+# (host.docker.internal fonctionne sur Docker Desktop Windows/Mac ;
+#  sous Docker natif sur Linux, remplacer par --network host)
+docker run --rm -i -e BASE_URL=http://host.docker.internal:8080 grafana/k6 run - < loadtest/scenario.js
+```
+
+⚠️ Le rate limiting sur `/api/auth/**` (10 req/min/IP) s'applique aussi au test de charge : avec 10 utilisateurs virtuels qui s'inscrivent et se connectent en boucle depuis la même machine (donc la même IP), tu verras rapidement des `429` sur `register`/`login` — c'est le rate limiter qui fonctionne correctement, pas un bug du script.
+
 ## Base de données et migrations
 
 Le projet utilise PostgreSQL en exécution et Flyway pour les migrations.
@@ -182,6 +284,7 @@ Les migrations SQL se trouvent dans `src/main/resources/db/migration/` :
 - `V2__create_app_users_table.sql`
 - `V3__add_incident_reporter.sql`
 - `V4__normalize_app_user_roles.sql`
+- `V5__create_revoked_tokens_table.sql`
 
 La configuration utilise le mode `validate` de Hibernate : le schéma doit correspondre aux entités et aux migrations appliquées.
 
@@ -203,10 +306,10 @@ java -jar .\build\libs\incident-api-0.0.1-SNAPSHOT.jar
 
 ## Sécurité et préparation à la production
 
-- Les secrets (`JWT_SECRET`, `DB_PASSWORD`, `ADMIN_PASSWORD`) doivent être injectés via variables d'environnement ou un gestionnaire de secrets — jamais commités.
+- Les secrets (`JWT_SECRET`, `DB_PASSWORD`, `ADMIN_PASSWORD`) sont gérés via HashiCorp Vault (voir [plus haut](#gestion-des-secrets-avec-hashicorp-vault)) — mais en **mode développement**, pas prêt pour une vraie prod (stockage en mémoire, jeton root, pas de TLS). Pour une vraie mise en production, prévoir : un backend de stockage persistant, l'authentification AppRole, et TLS de bout en bout.
 - Activer le profil `prod` pour désactiver la documentation Swagger publique.
-- Utiliser HTTPS devant l'application (reverse proxy / load balancer).
-- Le rate limiting intégré protège une seule instance ; prévoir un store partagé pour un déploiement distribué.
+- **HTTPS** : non géré par l'application elle-même, et volontairement pas implémenté dans ce dépôt — il n'existe aucun moyen d'obtenir un certificat de confiance (Let's Encrypt) pour `localhost` sans nom de domaine public réel. En production, placer un reverse proxy/load balancer devant l'application qui termine le TLS (ex. Nginx ou Traefik avec Let's Encrypt/Certbot, ou la terminaison TLS du load balancer d'un fournisseur cloud) ; l'application continue de parler HTTP en clair uniquement sur le réseau interne, derrière ce proxy.
+- **Rate limiting distribué** : le filtre actuel est en mémoire, par instance — suffisant pour une seule instance. Avant de déployer sur plusieurs instances derrière un load balancer, le remplacer par un compteur partagé (ex. Redis, `INCR`/`EXPIRE` par IP), sinon chaque instance a sa propre limite.
 - Exécuter `.\gradlew check` avant chaque livraison.
 
 ## Structure du projet
@@ -227,9 +330,14 @@ src/
 │   └── resources/
 │       ├── application.properties
 │       ├── application-prod.properties
-│       └── db/migration/
+│       ├── db/migration/
+│       └── META-INF/spring.factories
 └── test/
     └── java/fr/abdias/incident_api/
+
+backup/        # script de sauvegarde PostgreSQL planifiée
+vault/         # script d'initialisation des secrets dans Vault
+loadtest/      # script de test de charge k6
 ```
 
 ## Licence
