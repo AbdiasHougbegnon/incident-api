@@ -1,0 +1,61 @@
+apiVersion: 1
+
+contactPoints:
+  - orgId: 1
+    name: placeholder-contact-point
+    receivers:
+      - uid: placeholder-receiver
+        type: webhook
+        settings:
+          # Point de contact factice : remplacer par un vrai webhook Slack/Teams,
+          # ou configurer un receiver "email" avec un vrai serveur SMTP, avant
+          # de compter sur cette alerte en production.
+          url: https://example.invalid/replace-with-a-real-webhook
+          httpMethod: POST
+
+policies:
+  - orgId: 1
+    receiver: placeholder-contact-point
+    group_by: ["grafana_folder", "alertname"]
+
+groups:
+  - orgId: 1
+    name: incident-api-alerts
+    folder: incident-api
+    interval: 1m
+    rules:
+      - uid: incident-api-down
+        title: "Incident API indisponible"
+        condition: C
+        for: 1m
+        noDataState: Alerting
+        execErrState: Alerting
+        data:
+          - refId: A
+            relativeTimeRange:
+              from: 300
+              to: 0
+            datasourceUid: prometheus-ds
+            model:
+              expr: up{job="incident-api"}
+              intervalMs: 1000
+              maxDataPoints: 43200
+          - refId: B
+            datasourceUid: __expr__
+            model:
+              type: reduce
+              expression: A
+              reducer: last
+          - refId: C
+            datasourceUid: __expr__
+            model:
+              type: threshold
+              expression: B
+              conditions:
+                - evaluator:
+                    type: lt
+                    params: [1]
+        annotations:
+          summary: "L'API incident-api ne repond plus (metrique 'up' a 0) depuis au moins 1 minute."
+        labels:
+          severity: critical

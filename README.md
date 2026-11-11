@@ -14,10 +14,11 @@ API REST de gestion des incidents informatiques développée avec Java et Spring
 - Déconnexion (`/api/auth/logout`) avec révocation effective du jeton courant.
 - Migrations de base de données avec Flyway (PostgreSQL).
 - Documentation interactive de l'API avec OpenAPI et Swagger UI (désactivable en production).
-- Observabilité : endpoints Spring Actuator (santé, métriques, Prometheus), logs structurés en JSON.
+- Observabilité : endpoints Spring Actuator sur un port de gestion isolé, supervision Prometheus + Grafana (tableau de bord + alerte de démonstration), logs structurés en JSON.
 - Sauvegardes automatiques et planifiées de la base PostgreSQL.
 - Secrets gérés via HashiCorp Vault (mode développement).
-- Script de test de charge (k6).
+- Pipeline de déploiement continu (scaffold Fly.io, staging automatique + promotion manuelle en prod).
+- Scripts de test de charge (k6) : vérification rapide et scénario de montée en charge progressive.
 - Tests automatisés et mesure de couverture avec JaCoCo.
 - Conteneurisation avec Docker et docker-compose.
 
@@ -37,8 +38,10 @@ API REST de gestion des incidents informatiques développée avec Java et Spring
 - JUnit et Mockito
 - JaCoCo
 - Spring Boot Actuator / Micrometer (Prometheus)
+- Prometheus et Grafana
 - HashiCorp Vault
 - k6 (tests de charge)
+- Fly.io (scaffold de déploiement)
 - Docker / docker-compose
 
 ## Démarrage rapide avec Docker
@@ -48,7 +51,7 @@ C'est la méthode recommandée pour lancer le projet en local.
 ```bash
 cp .env.example .env
 # Éditer .env : définir DB_PASSWORD, JWT_SECRET, VAULT_DEV_ROOT_TOKEN,
-# et optionnellement ADMIN_EMAIL/ADMIN_PASSWORD
+# GRAFANA_ADMIN_PASSWORD, et optionnellement ADMIN_EMAIL/ADMIN_PASSWORD
 docker-compose up --build
 ```
 
@@ -58,6 +61,8 @@ Au démarrage, la stack lance aussi :
 - **`vault`** : un serveur HashiCorp Vault en mode développement, qui stocke les secrets (`DB_PASSWORD`, `JWT_SECRET`, `ADMIN_EMAIL`, `ADMIN_PASSWORD`).
 - **`vault-init`** : un conteneur qui s'exécute une seule fois pour écrire ces secrets dans Vault (`secret/incident-api`), à partir de ton fichier `.env`.
 - **`postgres-backup`** : un conteneur qui sauvegarde la base PostgreSQL toutes les 24h.
+- **`prometheus`** : scrute les métriques de l'application toutes les 15s, consultable sur `http://localhost:9090`.
+- **`grafana`** : tableau de bord de supervision, consultable sur `http://localhost:3000` (identifiant `admin`, mot de passe = `GRAFANA_ADMIN_PASSWORD` dans `.env`).
 
 Le service `app` ne lit **plus** `DB_PASSWORD`/`JWT_SECRET`/`ADMIN_EMAIL`/`ADMIN_PASSWORD` directement dans son environnement : il les récupère auprès de Vault au démarrage (voir [Gestion des secrets](#gestion-des-secrets-avec-hashicorp-vault)). `docker compose up` attend donc que `vault-init` ait terminé avant de démarrer `app`.
 
@@ -224,17 +229,19 @@ Les valeurs de `status` (`OPEN`, `IN_PROGRESS`, `RESOLVED`, `CLOSED`) et de `pri
 
 ## Observabilité
 
-L'application expose des endpoints [Spring Boot Actuator](https://docs.spring.io/spring-boot/reference/actuator/index.html) :
+### Endpoints Actuator sur un port isolé
 
-| Endpoint | Accès | Contenu |
-|---|---|---|
-| `GET /actuator/health` | Public | État global (`UP`/`DOWN`) uniquement |
-| `GET /actuator/health` (avec un JWT `ADMIN`) | `ADMIN` | Détail par composant (base de données, disque...) |
-| `GET /actuator/info` | Public | Nom et version de build de l'application |
-| `GET /actuator/metrics` | `ADMIN` | Métriques JVM/HTTP (mémoire, threads, temps de réponse...) |
-| `GET /actuator/prometheus` | `ADMIN` | Les mêmes métriques, au format que Prometheus sait scraper |
+L'application expose des endpoints [Spring Boot Actuator](https://docs.spring.io/spring-boot/reference/actuator/index.html) (`health`, `info`, `metrics`, `prometheus`) sur un **port de gestion séparé** (`management.server.port=9001`, voir `application.properties`), distinct du port applicatif (8080).
 
-Les détails de santé et les métriques ne sont volontairement pas publics : ils peuvent révéler des informations internes (versions, chemins, état de la base) à un attaquant non authentifié.
+Pourquoi ce choix plutôt qu'une protection par rôle JWT (comme pour le reste de l'API) : un scraper Prometheus interroge l'endpoint toutes les 15 secondes en continu — il ne peut pas "se reconnecter" avec un jeton JWT qui expire au bout d'une heure. La solution standard Spring Boot pour ce cas précis est d'isoler ces endpoints sur un port dédié, puis de ne **jamais le publier publiquement**. Dans `docker-compose.yml`, le port 9001 n'est pas mappé vers l'hôte : seuls les conteneurs du même réseau Docker (ex. `prometheus`) peuvent l'atteindre. C'est une isolation réseau, strictement plus robuste qu'un contrôle applicatif par rôle — inatteignable depuis l'extérieur quels que soient les identifiants présentés.
+
+Conséquence pratique : `curl http://localhost:8080/actuator/health` ne fonctionne plus (ce chemin n'existe plus sur ce port). Pour consulter la santé de l'app depuis ta machine en debug, utiliser `docker compose exec app curl http://localhost:9001/actuator/health` (depuis l'intérieur du conteneur).
+
+### Prometheus et Grafana
+
+- **Prometheus** (`http://localhost:9090`) scrute `app:9001/actuator/prometheus` toutes les 15s (config : `monitoring/prometheus.yml`). Vérifier que la cible est `UP` : `http://localhost:9090/targets`.
+- **Grafana** (`http://localhost:3000`, identifiant `admin` / mot de passe `GRAFANA_ADMIN_PASSWORD`) affiche un tableau de bord préconfiguré (`monitoring/grafana/provisioning/dashboards/json/incident-api.json`) : uptime, mémoire JVM, débit et latence HTTP, disponibilité.
+- Une **règle d'alerte de démonstration** est provisionnée (`monitoring/grafana/provisioning/alerting/`) : se déclenche si l'application ne répond plus pendant 1 minute. ⚠️ Son point de contact est un webhook factice (`https://example.invalid/...`) — **aucune vraie notification ne sera envoyée** tant qu'il n'est pas remplacé par un vrai webhook Slack/Teams ou un serveur SMTP réel dans Grafana (`Alerting > Contact points`).
 
 Les logs sont émis en JSON structuré sur la sortie standard (`logging.structured.format.console=logstash`), directement exploitables par un outil centralisé (ELK, Loki, Datadog...) sans configuration supplémentaire.
 
@@ -258,11 +265,17 @@ C'est une solution minimale adaptée à un environnement de démo/développement
 
 ## Tests de charge
 
-Un script [k6](https://k6.io/) (`loadtest/scenario.js`) simule 10 utilisateurs simultanés pendant 30 secondes, enchaînant inscription, connexion, création d'incident, liste paginée et consultation.
+Deux scripts [k6](https://k6.io/), partageant la logique commune de `loadtest/common.js` :
+
+- **`loadtest/scenario.js`** — vérification rapide : 10 utilisateurs simultanés pendant 30s, enchaînant inscription, connexion, création d'incident, liste paginée et consultation (chaque itération s'authentifie, comme un smoke test de bout en bout).
+- **`loadtest/scenario-extended.js`** — montée en charge progressive : de 0 à 20 utilisateurs virtuels sur plusieurs minutes (`ramping-vus`). Ce scénario s'authentifie **une seule fois** (dans `setup()`, pas à chaque itération) et sollicite ensuite uniquement les endpoints métier (`/api/incidents`) — comme un vrai client qui réutilise son jeton, et sans se heurter inutilement au rate limiting de `/api/auth/**`.
 
 ```bash
-# Avec k6 installé localement
+# Verification rapide
 k6 run loadtest/scenario.js
+
+# Montee en charge progressive
+k6 run loadtest/scenario-extended.js
 
 # Ou via l'image Docker officielle, sans rien installer
 # (host.docker.internal fonctionne sur Docker Desktop Windows/Mac ;
@@ -270,7 +283,7 @@ k6 run loadtest/scenario.js
 docker run --rm -i -e BASE_URL=http://host.docker.internal:8080 grafana/k6 run - < loadtest/scenario.js
 ```
 
-⚠️ Le rate limiting sur `/api/auth/**` (10 req/min/IP) s'applique aussi au test de charge : avec 10 utilisateurs virtuels qui s'inscrivent et se connectent en boucle depuis la même machine (donc la même IP), tu verras rapidement des `429` sur `register`/`login` — c'est le rate limiter qui fonctionne correctement, pas un bug du script.
+⚠️ Le rate limiting sur `/api/auth/**` (10 req/min/IP) s'applique au scénario rapide : avec 10 utilisateurs virtuels qui s'inscrivent et se connectent en boucle depuis la même machine (donc la même IP), tu verras rapidement des `429` sur `register`/`login` — c'est le rate limiter qui fonctionne correctement, pas un bug du script. C'est justement pour éviter ce faux négatif que le scénario étendu ne s'authentifie qu'une seule fois.
 
 ## Base de données et migrations
 
@@ -303,6 +316,54 @@ Start-Process .\build\reports\jacoco\test\html\index.html
 .\gradlew bootJar
 java -jar .\build\libs\incident-api-0.0.1-SNAPSHOT.jar
 ```
+
+## Revue de code (action à faire toi-même)
+
+Ce dépôt n'a, pour l'instant, aucune barrière empêchant de pousser directement sur `master` sans relecture — c'est d'ailleurs arrivé plusieurs fois pendant le développement de ce projet. Ça ne peut pas être automatisé depuis ce dépôt (c'est un réglage GitHub, pas du code) :
+
+1. Sur GitHub : `Settings > Branches > Add branch protection rule`.
+2. Branche ciblée : `master`.
+3. Activer *"Require a pull request before merging"* et *"Require approvals"* (au moins 1).
+4. Optionnel mais recommandé : *"Require status checks to pass before merging"* → sélectionner le job `Build and test` de la CI.
+
+Une fois actif, même un push direct sur `master` sera refusé par GitHub — toute modification devra passer par une Pull Request.
+
+## Environnements (staging / production)
+
+- **`application-staging.properties`** : mêmes garde-fous que la prod (voir plus bas), mais Swagger reste actif pour permettre l'exploration de l'API avant promotion.
+- **`application-prod.properties`** : Swagger désactivé.
+
+Le principe suivi est *"build once, promote"* : la même image Docker est déployée d'abord en staging, puis — après validation manuelle — promue en prod sans être reconstruite. Voir la section suivante.
+
+## Déploiement continu (CI/CD)
+
+Un scaffold de déploiement vers [Fly.io](https://fly.io/) est préparé (`fly.toml`, `.github/workflows/deploy.yml`) mais **inactif** : je n'ai pas de compte Fly.io ni de jeton à ta place, donc rien ne se déploie tant que tu n'as pas fait ces étapes toi-même.
+
+### Activer le déploiement réel
+
+1. Créer un compte sur [fly.io](https://fly.io/) et installer `flyctl`.
+2. `fly auth login`, puis `fly apps create incident-api-staging` et `fly apps create incident-api-prod`.
+3. Provisionner une vraie base de données : `fly postgres create` (une instance par environnement), puis `fly postgres attach` sur chaque app.
+4. Définir les vrais secrets de production (**jamais** le Vault "dev mode" de ce dépôt, voir plus haut) :
+   ```bash
+   fly secrets set JWT_SECRET=... ADMIN_EMAIL=... ADMIN_PASSWORD=... --app incident-api-staging
+   ```
+5. Récupérer un jeton de déploiement : `fly auth token`.
+6. Sur GitHub : `Settings > Secrets and variables > Actions` → ajouter un secret `FLY_API_TOKEN` avec ce jeton.
+
+### Comment ça se déclenche
+
+- **Staging** : automatiquement après chaque push sur `master` dont la CI (`Incident API CI`) passe.
+- **Production** : jamais automatiquement. Déclenchement manuel depuis l'onglet *Actions* de GitHub (`Deploy` → `Run workflow` → `target: prod`) — une promotion explicite, décidée par un humain.
+
+## Haute disponibilité de la base de données
+
+Volontairement **non implémenté** ici (documentation seulement) : une seule instance PostgreSQL tourne, sans réplication ni bascule automatique — un point de défaillance unique. C'est un choix délibéré : le chantier est lourd pour un gain limité sur un projet sans trafic réel à protéger aujourd'hui.
+
+Ce qu'il faudrait pour une vraie haute disponibilité :
+- **Réplication en streaming** : une ou plusieurs instances PostgreSQL "replica" recevant en continu les changements du primaire (lecture seule, utile aussi pour répartir la charge de lecture).
+- **Bascule automatique (failover)** : un outil dédié comme [Patroni](https://patroni.readthedocs.io/) ou `repmgr`, qui détecte la panne du primaire et promeut automatiquement une replica — ce n'est *pas* quelque chose qu'on improvise soi-même de façon fiable.
+- **Alternative plus simple en pratique** : un service managé avec HA intégrée (AWS RDS Multi-AZ, Google Cloud SQL avec haute disponibilité...) qui gère tout ça pour toi, au prix d'un abonnement.
 
 ## Sécurité et préparation à la production
 
@@ -337,7 +398,9 @@ src/
 
 backup/        # script de sauvegarde PostgreSQL planifiée
 vault/         # script d'initialisation des secrets dans Vault
-loadtest/      # script de test de charge k6
+loadtest/      # scripts de test de charge k6
+monitoring/    # config Prometheus + provisioning Grafana (datasource, dashboard, alerte)
+fly.toml       # scaffold de deploiement Fly.io (inactif sans compte/jeton)
 ```
 
 ## Licence

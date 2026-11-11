@@ -1,0 +1,57 @@
+name: Deploy
+
+on:
+  workflow_run:
+    workflows: ["Incident API CI"]
+    types: [completed]
+    branches: [master]
+  workflow_dispatch:
+    inputs:
+      target:
+        description: "Environnement cible pour un declenchement manuel"
+        required: true
+        default: staging
+        type: choice
+        options:
+          - staging
+          - prod
+
+permissions:
+  contents: read
+
+jobs:
+  deploy-staging:
+    name: Deploy to staging (auto apres CI sur master)
+    if: >
+      (github.event_name == 'workflow_run' && github.event.workflow_run.conclusion == 'success') ||
+      (github.event_name == 'workflow_dispatch' && github.event.inputs.target == 'staging')
+    runs-on: ubuntu-latest
+    environment: staging
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v6
+
+      - name: Deploy to Fly.io (staging)
+        uses: superfly/flyctl-actions/setup-flyctl@master
+
+      - name: Run flyctl deploy
+        run: flyctl deploy --remote-only --app incident-api-staging
+        env:
+          FLY_API_TOKEN: ${{ secrets.FLY_API_TOKEN }}
+
+  deploy-prod:
+    name: Promote to production (manuel uniquement)
+    if: github.event_name == 'workflow_dispatch' && github.event.inputs.target == 'prod'
+    runs-on: ubuntu-latest
+    environment: production
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v6
+
+      - name: Deploy to Fly.io (prod)
+        uses: superfly/flyctl-actions/setup-flyctl@master
+
+      - name: Run flyctl deploy
+        run: flyctl deploy --remote-only --app incident-api-prod
+        env:
+          FLY_API_TOKEN: ${{ secrets.FLY_API_TOKEN }}
