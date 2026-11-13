@@ -17,7 +17,7 @@ API REST de gestion des incidents informatiques développée avec Java et Spring
 - Observabilité : endpoints Spring Actuator sur un port de gestion isolé, supervision Prometheus + Grafana (tableau de bord + alerte de démonstration), logs structurés en JSON.
 - Sauvegardes automatiques et planifiées de la base PostgreSQL.
 - Secrets gérés via HashiCorp Vault (mode développement).
-- Pipeline de déploiement continu (scaffold Fly.io, staging automatique + promotion manuelle en prod).
+- Déploiement visé : VM Oracle Cloud Always Free (gratuite à vie, pas de mise en veille).
 - Scripts de test de charge (k6) : vérification rapide et scénario de montée en charge progressive.
 - Tests automatisés et mesure de couverture avec JaCoCo.
 - Formatage de code automatique et vérifié en CI (Spotless).
@@ -43,7 +43,6 @@ API REST de gestion des incidents informatiques développée avec Java et Spring
 - Prometheus et Grafana
 - HashiCorp Vault
 - k6 (tests de charge)
-- Fly.io (scaffold de déploiement)
 - Spotless (formateur Eclipse/JDT)
 - SonarCloud (scaffold)
 - Docker / docker-compose
@@ -367,26 +366,19 @@ Une fois actif, même un push direct sur `master` sera refusé par GitHub — to
 
 Le principe suivi est *"build once, promote"* : la même image Docker est déployée d'abord en staging, puis — après validation manuelle — promue en prod sans être reconstruite. Voir la section suivante.
 
-## Déploiement continu (CI/CD)
+## Déploiement en production : VM Oracle Cloud Always Free
 
-Un scaffold de déploiement vers [Fly.io](https://fly.io/) est préparé (`fly.toml`, `.github/workflows/deploy.yml`) mais **inactif** : je n'ai pas de compte Fly.io ni de jeton à ta place, donc rien ne se déploie tant que tu n'as pas fait ces étapes toi-même.
+Choix retenu après un essai infructueux sur Fly.io (base Postgres "unmanaged" qui s'endort de façon imprévisible sur le tier gratuit, peu adapté à un lien de portfolio qui doit toujours répondre) : une **VM Oracle Cloud Ampere A1 (ARM)**, gratuite à vie (jusqu'à 4 OCPU / 24 Go de RAM), sans "scale to zero" — elle ne s'éteint jamais toute seule.
 
-### Activer le déploiement réel
+Le déploiement reste **manuel** pour l'instant (pas de pipeline CI/CD automatisé vers cette VM) :
 
-1. Créer un compte sur [fly.io](https://fly.io/) et installer `flyctl`.
-2. `fly auth login`, puis `fly apps create incident-api-staging` et `fly apps create incident-api-prod`.
-3. Provisionner une vraie base de données : `fly postgres create` (une instance par environnement), puis `fly postgres attach` sur chaque app.
-4. Définir les vrais secrets de production (**jamais** le Vault "dev mode" de ce dépôt, voir plus haut) :
-   ```bash
-   fly secrets set JWT_SECRET=... ADMIN_EMAIL=... ADMIN_PASSWORD=... --app incident-api-staging
-   ```
-5. Récupérer un jeton de déploiement : `fly auth token`.
-6. Sur GitHub : `Settings > Secrets and variables > Actions` → ajouter un secret `FLY_API_TOKEN` avec ce jeton.
+1. Créer la VM (console OCI : `Compute > Instances > Create Instance`, image Ubuntu, forme `VM.Standard.A1.Flex`, clé SSH téléchargée).
+2. Ouvrir le port `8080` (et `3000` pour Grafana si besoin) dans la liste de sécurité du sous-réseau.
+3. Se connecter en SSH, installer Docker + Docker Compose.
+4. Copier ce dépôt (ou au minimum `Dockerfile`, `docker-compose.yml`, `backup/`, `vault/`, `monitoring/`, `.env`) sur la VM.
+5. `docker compose up -d` — exactement la même commande qu'en local.
 
-### Comment ça se déclenche
-
-- **Staging** : automatiquement après chaque push sur `master` dont la CI (`Incident API CI`) passe.
-- **Production** : jamais automatiquement. Déclenchement manuel depuis l'onglet *Actions* de GitHub (`Deploy` → `Run workflow` → `target: prod`) — une promotion explicite, décidée par un humain.
+Rien n'empêche d'automatiser cette étape plus tard (ex. une action GitHub qui se connecte en SSH et relance `docker compose pull && docker compose up -d` après chaque push sur `master`).
 
 ## Haute disponibilité de la base de données
 
@@ -432,7 +424,6 @@ backup/        # script de sauvegarde PostgreSQL planifiée
 vault/         # script d'initialisation des secrets dans Vault
 loadtest/      # scripts de test de charge k6
 monitoring/    # config Prometheus + provisioning Grafana (datasource, dashboard, alerte)
-fly.toml       # scaffold de deploiement Fly.io (inactif sans compte/jeton)
 ```
 
 ## Licence
