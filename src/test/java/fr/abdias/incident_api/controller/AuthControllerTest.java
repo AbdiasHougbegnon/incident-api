@@ -28,62 +28,50 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 @AutoConfigureMockMvc(addFilters = false)
 class AuthControllerTest {
 
-    @Autowired
-    private MockMvc mockMvc;
+	@Autowired
+	private MockMvc mockMvc;
 
-    @MockitoBean
-    private AuthService authService;
+	@MockitoBean
+	private AuthService authService;
 
-    @MockitoBean
-    private RegistrationService registrationService;
+	@MockitoBean
+	private RegistrationService registrationService;
 
-    @Test
-    void shouldReturn201WhenRegistrationSucceeds() throws Exception {
-        mockMvc.perform(post("/api/auth/register")
-                .contentType(MediaType.APPLICATION_JSON)
-                .content("""
-                    {
-                      "email": "nouveau@example.com",
-                      "password": "MotDePasseTest123!"
-                    }
-                    """))
-                .andExpect(status().isCreated());
-    }
+	@Test
+	void shouldReturn201WhenRegistrationSucceeds() throws Exception {
+		mockMvc.perform(post("/api/auth/register").contentType(MediaType.APPLICATION_JSON).content("""
+				{
+				  "email": "nouveau@example.com",
+				  "password": "MotDePasseTest123!"
+				}
+				""")).andExpect(status().isCreated());
+	}
 
-    @Test
-    void shouldReturn409WhenEmailAlreadyExists() throws Exception {
-        doThrow(new EmailAlreadyExistsException(
-                "Cette adresse e-mail est déjà utilisée."))
-                .when(registrationService)
-                .register("existant@example.com", "MotDePasseTest123!");
+	@Test
+	void shouldReturn409WhenEmailAlreadyExists() throws Exception {
+		doThrow(new EmailAlreadyExistsException("Cette adresse e-mail est déjà utilisée.")).when(registrationService)
+				.register("existant@example.com", "MotDePasseTest123!");
 
-        mockMvc.perform(post("/api/auth/register")
-                .contentType(MediaType.APPLICATION_JSON)
-                .content("""
-                    {
-                      "email": "existant@example.com",
-                      "password": "MotDePasseTest123!"
-                    }
-                    """))
-                .andExpect(status().isConflict())
-                .andExpect(jsonPath("$.detail").value(
-                        "Cette adresse e-mail est déjà utilisée."));
-    }
+		mockMvc.perform(post("/api/auth/register").contentType(MediaType.APPLICATION_JSON).content("""
+				{
+				  "email": "existant@example.com",
+				  "password": "MotDePasseTest123!"
+				}
+				""")).andExpect(status().isConflict())
+				.andExpect(jsonPath("$.detail").value("Cette adresse e-mail est déjà utilisée."));
+	}
 
-    @Test
-    void shouldReturn400WhenEmailIsInvalid() throws Exception {
-        mockMvc.perform(post("/api/auth/register")
-                .contentType(MediaType.APPLICATION_JSON)
-                .content("""
-                    {
-                      "email": "pas-un-email",
-                      "password": "MotDePasseTest123!"
-                    }
-                    """))
-                .andExpect(status().isBadRequest());
-    }
+	@Test
+	void shouldReturn400WhenEmailIsInvalid() throws Exception {
+		mockMvc.perform(post("/api/auth/register").contentType(MediaType.APPLICATION_JSON).content("""
+				{
+				  "email": "pas-un-email",
+				  "password": "MotDePasseTest123!"
+				}
+				""")).andExpect(status().isBadRequest());
+	}
 
-    @Test
+	@Test
     void shouldReturn200WhenLoginSucceeds() throws Exception {
         when(authService.authenticate(
                 "utilisateur@example.com",
@@ -104,20 +92,15 @@ class AuthControllerTest {
                 .andExpect(jsonPath("$.tokenType").value("Bearer"));
     }
 
-    @Test
-    void shouldReturn204WhenLogoutSucceeds() throws Exception {
-        Jwt jwt = Jwt.withTokenValue("test-token")
-                .header("alg", "HS256")
-                .subject("utilisateur@example.com")
-                .claim("jti", "token-id-123")
-                .issuedAt(Instant.now())
-                .expiresAt(Instant.now().plusSeconds(3600))
-                .build();
+	@Test
+	void shouldReturn204WhenLogoutSucceeds() throws Exception {
+		Jwt jwt = Jwt.withTokenValue("test-token").header("alg", "HS256").subject("utilisateur@example.com")
+				.claim("jti", "token-id-123").issuedAt(Instant.now()).expiresAt(Instant.now().plusSeconds(3600))
+				.build();
 
-        mockMvc.perform(post("/api/auth/logout")
-                        .principal(new UsernamePasswordAuthenticationToken(jwt, null)))
-                .andExpect(status().isNoContent());
+		mockMvc.perform(post("/api/auth/logout").principal(new UsernamePasswordAuthenticationToken(jwt, null)))
+				.andExpect(status().isNoContent());
 
-        verify(authService).logout(jwt);
-    }
+		verify(authService).logout(jwt);
+	}
 }

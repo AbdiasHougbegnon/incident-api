@@ -8,20 +8,10 @@ import org.springframework.stereotype.Component;
 @Component
 public class IncidentMapper {
 
-    public IncidentResponse toResponse(Incident incident) {
-        return IncidentResponse.builder()
-                .id(incident.getId())
-                .title(incident.getTitle())
-                .description(incident.getDescription())
-                .status(incident.getStatus())
-                .priority(incident.getPriority())
-                .createdAt(incident.getCreatedAt())
-                .updatedAt(incident.getUpdatedAt())
-                .reporterEmail(
-                        incident.getReporter() != null
-                                ? incident.getReporter().getEmail()
-                                : null
-                )
-                .build();
-    }
+	public IncidentResponse toResponse(Incident incident) {
+		return IncidentResponse.builder().id(incident.getId()).title(incident.getTitle())
+				.description(incident.getDescription()).status(incident.getStatus()).priority(incident.getPriority())
+				.createdAt(incident.getCreatedAt()).updatedAt(incident.getUpdatedAt())
+				.reporterEmail(incident.getReporter() != null ? incident.getReporter().getEmail() : null).build();
+	}
 }

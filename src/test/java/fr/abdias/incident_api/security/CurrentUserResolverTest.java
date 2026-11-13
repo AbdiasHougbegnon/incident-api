@@ -23,51 +23,47 @@ import static org.mockito.Mockito.when;
 @ExtendWith(MockitoExtension.class)
 class CurrentUserResolverTest {
 
-    @Mock
-    private AppUserRepository appUserRepository;
+	@Mock
+	private AppUserRepository appUserRepository;
 
-    @InjectMocks
-    private CurrentUserResolver currentUserResolver;
+	@InjectMocks
+	private CurrentUserResolver currentUserResolver;
 
-    @Test
-    void shouldResolveRegularUserAsNonAdmin() {
-        AppUser user = new AppUser();
-        user.setId(1L);
-        user.setEmail("user1@example.com");
+	@Test
+	void shouldResolveRegularUserAsNonAdmin() {
+		AppUser user = new AppUser();
+		user.setId(1L);
+		user.setEmail("user1@example.com");
 
-        when(appUserRepository.findByEmailIgnoreCase("user1@example.com"))
-                .thenReturn(Optional.of(user));
+		when(appUserRepository.findByEmailIgnoreCase("user1@example.com")).thenReturn(Optional.of(user));
 
-        List<GrantedAuthority> authorities = List.of(new SimpleGrantedAuthority("ROLE_USER"));
-        var authentication = new UsernamePasswordAuthenticationToken(
-                "user1@example.com", null, authorities);
+		List<GrantedAuthority> authorities = List.of(new SimpleGrantedAuthority("ROLE_USER"));
+		var authentication = new UsernamePasswordAuthenticationToken("user1@example.com", null, authorities);
 
-        CurrentUser result = currentUserResolver.resolve(authentication);
+		CurrentUser result = currentUserResolver.resolve(authentication);
 
-        assertThat(result.id()).isEqualTo(1L);
-        assertThat(result.email()).isEqualTo("user1@example.com");
-        assertThat(result.admin()).isFalse();
-    }
+		assertThat(result.id()).isEqualTo(1L);
+		assertThat(result.email()).isEqualTo("user1@example.com");
+		assertThat(result.admin()).isFalse();
+	}
 
-    @Test
-    void shouldResolveAdminUserAsAdmin() {
-        AppUser user = new AppUser();
-        user.setId(2L);
-        user.setEmail("admin@example.com");
+	@Test
+	void shouldResolveAdminUserAsAdmin() {
+		AppUser user = new AppUser();
+		user.setId(2L);
+		user.setEmail("admin@example.com");
 
-        when(appUserRepository.findByEmailIgnoreCase("admin@example.com"))
-                .thenReturn(Optional.of(user));
+		when(appUserRepository.findByEmailIgnoreCase("admin@example.com")).thenReturn(Optional.of(user));
 
-        List<GrantedAuthority> authorities = List.of(new SimpleGrantedAuthority("ROLE_ADMIN"));
-        var authentication = new UsernamePasswordAuthenticationToken(
-                "admin@example.com", null, authorities);
+		List<GrantedAuthority> authorities = List.of(new SimpleGrantedAuthority("ROLE_ADMIN"));
+		var authentication = new UsernamePasswordAuthenticationToken("admin@example.com", null, authorities);
 
-        CurrentUser result = currentUserResolver.resolve(authentication);
+		CurrentUser result = currentUserResolver.resolve(authentication);
 
-        assertThat(result.admin()).isTrue();
-    }
+		assertThat(result.admin()).isTrue();
+	}
 
-    @Test
+	@Test
     void shouldThrowWhenAuthenticatedUserIsUnknown() {
         when(appUserRepository.findByEmailIgnoreCase("ghost@example.com"))
                 .thenReturn(Optional.empty());

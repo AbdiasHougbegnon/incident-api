@@ -20,6 +20,8 @@ API REST de gestion des incidents informatiques développée avec Java et Spring
 - Pipeline de déploiement continu (scaffold Fly.io, staging automatique + promotion manuelle en prod).
 - Scripts de test de charge (k6) : vérification rapide et scénario de montée en charge progressive.
 - Tests automatisés et mesure de couverture avec JaCoCo.
+- Formatage de code automatique et vérifié en CI (Spotless).
+- Analyse de qualité de code statique (scaffold SonarCloud).
 - Conteneurisation avec Docker et docker-compose.
 
 ## Technologies
@@ -42,6 +44,8 @@ API REST de gestion des incidents informatiques développée avec Java et Spring
 - HashiCorp Vault
 - k6 (tests de charge)
 - Fly.io (scaffold de déploiement)
+- Spotless (formateur Eclipse/JDT)
+- SonarCloud (scaffold)
 - Docker / docker-compose
 
 ## Démarrage rapide avec Docker
@@ -309,6 +313,34 @@ La configuration utilise le mode `validate` de Hibernate : le schéma doit corre
 .\gradlew jacocoTestReport
 Start-Process .\build\reports\jacoco\test\html\index.html
 ```
+
+## Qualité de code : formatage et analyse statique
+
+### Spotless (formatage automatique)
+
+Le code Java est formaté selon le style **Eclipse/JDT** (via le plugin [Spotless](https://github.com/diffplug/spotless)). `spotlessCheck` est intégré à `.\gradlew check` : un code mal formaté fait échouer la CI.
+
+```powershell
+.\gradlew spotlessCheck   # vérifie sans modifier (ce que fait la CI)
+.\gradlew spotlessApply   # reformate automatiquement
+```
+
+Pourquoi Eclipse plutôt que `google-java-format` (le choix le plus courant) : ce dernier s'appuie sur des API internes du compilateur Java qui ne suivent pas encore Java 25 (version utilisée par ce projet) — le formateur Eclipse est indépendant du JDK hôte.
+
+### SonarCloud (scaffold, inactif)
+
+Le plugin Gradle `org.sonarqube` est configuré (`build.gradle.kts`), ainsi qu'une étape conditionnelle dans la CI (`.github/workflows/ci.yml`) — mais **l'analyse ne s'exécute pas** tant que le dépôt n'a pas été importé sur SonarCloud.
+
+**Pour activer :**
+
+1. Va sur [sonarcloud.io](https://sonarcloud.io/), connecte-toi avec ton compte GitHub (gratuit pour les dépôts publics).
+2. **"+" > Analyze new project"**, choisis ce dépôt GitHub.
+3. Note la **clé d'organisation** et la **clé de projet** générées — remplace les valeurs `sonar.projectKey`/`sonar.organization` dans `build.gradle.kts` si elles diffèrent de celles déjà renseignées (`AbdiasHougbegnon_incident-api` / `abdiashougbegnon`, des valeurs plausibles mais à vérifier après l'import).
+4. Génère un jeton : **My Account > Security > Generate Token**.
+5. Sur GitHub : `Settings > Secrets and variables > Actions` → ajoute un secret `SONAR_TOKEN` avec ce jeton.
+6. Au prochain push, la CI exécutera `./gradlew sonar` et le tableau de bord SonarCloud affichera les résultats (bugs, vulnérabilités, "code smells", couverture).
+
+Une fois actif, ajouter le badge de qualité (fourni par SonarCloud après le premier scan) en haut de ce README — c'est un signal appréciable sur un portfolio.
 
 ## Construction de l'application
 

@@ -14,10 +14,10 @@ import lombok.RequiredArgsConstructor;
 @RequiredArgsConstructor
 public class RevokedTokenCleanupJob {
 
-    private final RevokedTokenRepository revokedTokenRepository;
+	private final RevokedTokenRepository revokedTokenRepository;
 
-    @Scheduled(cron = "0 0 3 * * *")
-    public void purgeExpiredEntries() {
-        revokedTokenRepository.deleteByExpiresAtBefore(Instant.now());
-    }
+	@Scheduled(cron = "0 0 3 * * *")
+	public void purgeExpiredEntries() {
+		revokedTokenRepository.deleteByExpiresAtBefore(Instant.now());
+	}
 }

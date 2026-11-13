@@ -10,9 +10,9 @@ import fr.abdias.incident_api.model.AppUser;
 
 public interface AppUserRepository extends JpaRepository<AppUser, Long> {
 
-    Optional<AppUser> findByEmailIgnoreCase(String email);
+	Optional<AppUser> findByEmailIgnoreCase(String email);
 
-    boolean existsByEmailIgnoreCase(String email);
+	boolean existsByEmailIgnoreCase(String email);
 
-    boolean existsByRole(AppRole role);
+	boolean existsByRole(AppRole role);
 }

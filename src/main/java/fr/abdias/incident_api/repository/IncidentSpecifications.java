@@ -7,16 +7,14 @@ import org.springframework.data.jpa.domain.Specification;
 
 public final class IncidentSpecifications {
 
-    private IncidentSpecifications() {
-    }
+	private IncidentSpecifications() {
+	}
 
-    public static Specification<Incident> hasStatus(IncidentStatus status) {
-        return (root, query, builder) ->
-                status == null ? null : builder.equal(root.get("status"), status);
-    }
+	public static Specification<Incident> hasStatus(IncidentStatus status) {
+		return (root, query, builder) -> status == null ? null : builder.equal(root.get("status"), status);
+	}
 
-    public static Specification<Incident> hasPriority(IncidentPriority priority) {
-        return (root, query, builder) ->
-                priority == null ? null : builder.equal(root.get("priority"), priority);
-    }
+	public static Specification<Incident> hasPriority(IncidentPriority priority) {
+		return (root, query, builder) -> priority == null ? null : builder.equal(root.get("priority"), priority);
+	}
 }

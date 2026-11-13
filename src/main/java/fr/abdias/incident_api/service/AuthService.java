@@ -23,46 +23,31 @@ import lombok.RequiredArgsConstructor;
 @RequiredArgsConstructor
 public class AuthService {
 
-    private final AppUserRepository appUserRepository;
-    private final PasswordEncoder passwordEncoder;
-    private final JwtEncoder jwtEncoder;
-    private final RevokedTokenRepository revokedTokenRepository;
+	private final AppUserRepository appUserRepository;
+	private final PasswordEncoder passwordEncoder;
+	private final JwtEncoder jwtEncoder;
+	private final RevokedTokenRepository revokedTokenRepository;
 
-    public String authenticate(String email, String password) {
+	public String authenticate(String email, String password) {
 
-        AppUser user = appUserRepository.findByEmailIgnoreCase(email)
-                .orElseThrow(() ->
-                    new BadCredentialsException(
-                        "Identifiants invalides"
-                    )
-                );
+		AppUser user = appUserRepository.findByEmailIgnoreCase(email)
+				.orElseThrow(() -> new BadCredentialsException("Identifiants invalides"));
 
-        if (!passwordEncoder.matches(password, user.getPasswordHash())) {
-            throw new BadCredentialsException(
-                "Identifiants invalides"
-            );
-        }
+		if (!passwordEncoder.matches(password, user.getPasswordHash())) {
+			throw new BadCredentialsException("Identifiants invalides");
+		}
 
-        Instant now = Instant.now();
+		Instant now = Instant.now();
 
-        JwtClaimsSet claims = JwtClaimsSet.builder()
-                .id(UUID.randomUUID().toString())
-                .subject(user.getEmail())
-                .issuedAt(now)
-                .expiresAt(now.plusSeconds(3600))
-                .claim("role", user.getRole().name())
-                .build();
+		JwtClaimsSet claims = JwtClaimsSet.builder().id(UUID.randomUUID().toString()).subject(user.getEmail())
+				.issuedAt(now).expiresAt(now.plusSeconds(3600)).claim("role", user.getRole().name()).build();
 
-        JwsHeader header = JwsHeader.with(
-                org.springframework.security.oauth2.jose.jws.MacAlgorithm.HS256
-        ).build();
+		JwsHeader header = JwsHeader.with(org.springframework.security.oauth2.jose.jws.MacAlgorithm.HS256).build();
 
-        return jwtEncoder.encode(
-                JwtEncoderParameters.from(header, claims)
-        ).getTokenValue();
-    }
+		return jwtEncoder.encode(JwtEncoderParameters.from(header, claims)).getTokenValue();
+	}
 
-    public void logout(Jwt jwt) {
-        revokedTokenRepository.save(new RevokedToken(jwt.getId(), jwt.getExpiresAt()));
-    }
+	public void logout(Jwt jwt) {
+		revokedTokenRepository.save(new RevokedToken(jwt.getId(), jwt.getExpiresAt()));
+	}
 }

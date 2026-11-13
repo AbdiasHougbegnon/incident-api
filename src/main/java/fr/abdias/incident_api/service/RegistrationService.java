@@ -16,23 +16,22 @@ import fr.abdias.incident_api.exception.EmailAlreadyExistsException;
 @RequiredArgsConstructor
 public class RegistrationService {
 
-    private final AppUserRepository appUserRepository;
-    private final PasswordEncoder passwordEncoder;
+	private final AppUserRepository appUserRepository;
+	private final PasswordEncoder passwordEncoder;
 
-    @Transactional
-    public void register(String email, String password) {
-        String normalizedEmail = email.trim().toLowerCase(Locale.ROOT);
+	@Transactional
+	public void register(String email, String password) {
+		String normalizedEmail = email.trim().toLowerCase(Locale.ROOT);
 
-        if (appUserRepository.existsByEmailIgnoreCase(normalizedEmail)) {
-    throw new EmailAlreadyExistsException(
-        "Cette adresse e-mail est déjà utilisée."
-    );}
+		if (appUserRepository.existsByEmailIgnoreCase(normalizedEmail)) {
+			throw new EmailAlreadyExistsException("Cette adresse e-mail est déjà utilisée.");
+		}
 
-        AppUser user = new AppUser();
-        user.setEmail(normalizedEmail);
-        user.setPasswordHash(passwordEncoder.encode(password));
-        user.setRole(AppRole.USER);
+		AppUser user = new AppUser();
+		user.setEmail(normalizedEmail);
+		user.setPasswordHash(passwordEncoder.encode(password));
+		user.setRole(AppRole.USER);
 
-        appUserRepository.save(user);
-    }
+		appUserRepository.save(user);
+	}
 }

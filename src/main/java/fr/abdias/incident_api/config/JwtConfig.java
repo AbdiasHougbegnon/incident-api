@@ -28,52 +28,43 @@ import com.nimbusds.jose.jwk.source.ImmutableSecret;
 @Configuration
 public class JwtConfig {
 
-    @Bean
-    public SecretKey jwtSecretKey(
-            @Value("${security.jwt.secret}") String secret) {
+	@Bean
+	public SecretKey jwtSecretKey(@Value("${security.jwt.secret}") String secret) {
 
-        byte[] keyBytes = Base64.getDecoder().decode(secret);
+		byte[] keyBytes = Base64.getDecoder().decode(secret);
 
-        if (keyBytes.length < 32) {
-            throw new IllegalArgumentException(
-                "La cle JWT doit contenir au moins 32 octets."
-            );
-        }
+		if (keyBytes.length < 32) {
+			throw new IllegalArgumentException("La cle JWT doit contenir au moins 32 octets.");
+		}
 
-        return new SecretKeySpec(keyBytes, "HmacSHA256");
-    }
+		return new SecretKeySpec(keyBytes, "HmacSHA256");
+	}
 
-    @Bean
-    public JwtDecoder jwtDecoder(SecretKey jwtSecretKey, RevokedTokenRepository revokedTokenRepository) {
-        NimbusJwtDecoder decoder = NimbusJwtDecoder
-                .withSecretKey(jwtSecretKey)
-                .macAlgorithm(MacAlgorithm.HS256)
-                .build();
+	@Bean
+	public JwtDecoder jwtDecoder(SecretKey jwtSecretKey, RevokedTokenRepository revokedTokenRepository) {
+		NimbusJwtDecoder decoder = NimbusJwtDecoder.withSecretKey(jwtSecretKey).macAlgorithm(MacAlgorithm.HS256)
+				.build();
 
-        OAuth2TokenValidator<Jwt> validators = new DelegatingOAuth2TokenValidator<>(
-                JwtValidators.createDefault(),
-                new NotRevokedJwtValidator(revokedTokenRepository)
-        );
-        decoder.setJwtValidator(validators);
+		OAuth2TokenValidator<Jwt> validators = new DelegatingOAuth2TokenValidator<>(JwtValidators.createDefault(),
+				new NotRevokedJwtValidator(revokedTokenRepository));
+		decoder.setJwtValidator(validators);
 
-        return decoder;
-    }
+		return decoder;
+	}
 
-    @Bean
-    public JwtEncoder jwtEncoder(SecretKey jwtSecretKey) {
-        return new NimbusJwtEncoder(
-                new ImmutableSecret<>(jwtSecretKey)
-        );
-    }
+	@Bean
+	public JwtEncoder jwtEncoder(SecretKey jwtSecretKey) {
+		return new NimbusJwtEncoder(new ImmutableSecret<>(jwtSecretKey));
+	}
 
-    @Bean
-    public JwtAuthenticationConverter jwtAuthenticationConverter() {
-        JwtGrantedAuthoritiesConverter authoritiesConverter = new JwtGrantedAuthoritiesConverter();
-        authoritiesConverter.setAuthorityPrefix("ROLE_");
-        authoritiesConverter.setAuthoritiesClaimName("role");
+	@Bean
+	public JwtAuthenticationConverter jwtAuthenticationConverter() {
+		JwtGrantedAuthoritiesConverter authoritiesConverter = new JwtGrantedAuthoritiesConverter();
+		authoritiesConverter.setAuthorityPrefix("ROLE_");
+		authoritiesConverter.setAuthoritiesClaimName("role");
 
-        JwtAuthenticationConverter converter = new JwtAuthenticationConverter();
-        converter.setJwtGrantedAuthoritiesConverter(authoritiesConverter);
-        return converter;
-    }
+		JwtAuthenticationConverter converter = new JwtAuthenticationConverter();
+		converter.setJwtGrantedAuthoritiesConverter(authoritiesConverter);
+		return converter;
+	}
 }

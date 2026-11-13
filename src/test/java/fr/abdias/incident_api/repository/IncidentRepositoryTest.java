@@ -12,26 +12,22 @@ import static org.assertj.core.api.Assertions.assertThat;
 @DataJpaTest
 class IncidentRepositoryTest {
 
-    @Autowired
-    private IncidentRepository incidentRepository;
+	@Autowired
+	private IncidentRepository incidentRepository;
 
-    @Test
-    void shouldSaveIncidentAndGenerateId() {
-        // Arrange : préparer un incident
-        Incident incident = Incident.builder()
-                .title("Serveur inaccessible")
-                .description("Le serveur de production ne répond plus.")
-                .status(IncidentStatus.OPEN)
-                .priority(IncidentPriority.CRITICAL)
-                .build();
+	@Test
+	void shouldSaveIncidentAndGenerateId() {
+		// Arrange : préparer un incident
+		Incident incident = Incident.builder().title("Serveur inaccessible")
+				.description("Le serveur de production ne répond plus.").status(IncidentStatus.OPEN)
+				.priority(IncidentPriority.CRITICAL).build();
 
-        // Act : enregistrer l'incident
-        Incident savedIncident = incidentRepository.save(incident);
+		// Act : enregistrer l'incident
+		Incident savedIncident = incidentRepository.save(incident);
 
-        // Assert : vérifier le résultat
-        assertThat(savedIncident.getId()).isNotNull();
-        assertThat(savedIncident.getTitle())
-                .isEqualTo("Serveur inaccessible");
-        assertThat(savedIncident.getCreatedAt()).isNotNull();
-    }
+		// Assert : vérifier le résultat
+		assertThat(savedIncident.getId()).isNotNull();
+		assertThat(savedIncident.getTitle()).isEqualTo("Serveur inaccessible");
+		assertThat(savedIncident.getCreatedAt()).isNotNull();
+	}
 }

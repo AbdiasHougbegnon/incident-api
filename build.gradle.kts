@@ -3,6 +3,8 @@ plugins {
     jacoco
     id("org.springframework.boot") version "4.1.1"
     id("io.spring.dependency-management") version "1.1.7"
+    id("com.diffplug.spotless") version "6.25.0"
+    id("org.sonarqube") version "5.1.0.4882"
 }
 
 group = "fr.abdias"
@@ -20,6 +22,28 @@ repositories {
 
 springBoot {
 	buildInfo()
+}
+
+spotless {
+	java {
+		target("src/*/java/**/*.java")
+		// google-java-format s'appuie sur des API internes du compilateur qui ne
+		// suivent pas encore Java 25 ; le formateur Eclipse (JDT) est independant
+		// du JDK hote et reste stable face aux nouvelles versions de Java.
+		eclipse()
+		removeUnusedImports()
+	}
+}
+
+// Valeurs a verifier/remplacer une fois le projet importe sur sonarcloud.io
+// (Settings > Administration > ... apres l'import GitHub) : "check" ne lance
+// pas l'analyse Sonar, seul `./gradlew sonar` avec SONAR_TOKEN le fait.
+sonar {
+	properties {
+		property("sonar.projectKey", "AbdiasHougbegnon_incident-api")
+		property("sonar.organization", "abdiashougbegnon")
+		property("sonar.host.url", "https://sonarcloud.io")
+	}
 }
 
 dependencies {

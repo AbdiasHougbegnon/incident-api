@@ -22,77 +22,66 @@ import org.springframework.transaction.annotation.Transactional;
 @Transactional
 public class IncidentService {
 
-    private final IncidentRepository incidentRepository;
-    private final AppUserRepository appUserRepository;
+	private final IncidentRepository incidentRepository;
+	private final AppUserRepository appUserRepository;
 
-    public IncidentService(
-            IncidentRepository incidentRepository,
-            AppUserRepository appUserRepository) {
-        this.incidentRepository = incidentRepository;
-        this.appUserRepository = appUserRepository;
-    }
+	public IncidentService(IncidentRepository incidentRepository, AppUserRepository appUserRepository) {
+		this.incidentRepository = incidentRepository;
+		this.appUserRepository = appUserRepository;
+	}
 
-    public Incident createIncident(Incident incident, CurrentUser currentUser) {
-        AppUser reporter = appUserRepository.findById(currentUser.id())
-                .orElseThrow(() -> new IllegalStateException(
-                        "Utilisateur authentifié introuvable : " + currentUser.email()
-                ));
+	public Incident createIncident(Incident incident, CurrentUser currentUser) {
+		AppUser reporter = appUserRepository.findById(currentUser.id()).orElseThrow(
+				() -> new IllegalStateException("Utilisateur authentifié introuvable : " + currentUser.email()));
 
-        incident.setReporter(reporter);
+		incident.setReporter(reporter);
 
-        return incidentRepository.save(incident);
-    }
+		return incidentRepository.save(incident);
+	}
 
-    @Transactional(readOnly = true)
-    public Page<Incident> getIncidents(
-            IncidentStatus status,
-            IncidentPriority priority,
-            Pageable pageable) {
+	@Transactional(readOnly = true)
+	public Page<Incident> getIncidents(IncidentStatus status, IncidentPriority priority, Pageable pageable) {
 
-        Specification<Incident> specification = Specification
-                .where(IncidentSpecifications.hasStatus(status))
-                .and(IncidentSpecifications.hasPriority(priority));
+		Specification<Incident> specification = Specification.where(IncidentSpecifications.hasStatus(status))
+				.and(IncidentSpecifications.hasPriority(priority));
 
-        return incidentRepository.findAll(specification, pageable);
-    }
+		return incidentRepository.findAll(specification, pageable);
+	}
 
-    @Transactional(readOnly = true)
-    public Incident getIncidentById(Long id) {
-        return incidentRepository.findById(id)
-                .orElseThrow(() -> new IncidentNotFoundException(id));
-    }
+	@Transactional(readOnly = true)
+	public Incident getIncidentById(Long id) {
+		return incidentRepository.findById(id).orElseThrow(() -> new IncidentNotFoundException(id));
+	}
 
-    public Incident updateIncident(Long id, Incident updatedIncident, CurrentUser currentUser) {
-        Incident existingIncident = getIncidentById(id);
-        ensureCanModify(existingIncident, currentUser);
+	public Incident updateIncident(Long id, Incident updatedIncident, CurrentUser currentUser) {
+		Incident existingIncident = getIncidentById(id);
+		ensureCanModify(existingIncident, currentUser);
 
-        existingIncident.setTitle(updatedIncident.getTitle());
-        existingIncident.setDescription(updatedIncident.getDescription());
-        existingIncident.setStatus(updatedIncident.getStatus());
-        existingIncident.setPriority(updatedIncident.getPriority());
+		existingIncident.setTitle(updatedIncident.getTitle());
+		existingIncident.setDescription(updatedIncident.getDescription());
+		existingIncident.setStatus(updatedIncident.getStatus());
+		existingIncident.setPriority(updatedIncident.getPriority());
 
-        return incidentRepository.save(existingIncident);
-    }
+		return incidentRepository.save(existingIncident);
+	}
 
-    public void deleteIncident(Long id, CurrentUser currentUser) {
-        Incident incident = getIncidentById(id);
-        ensureCanModify(incident, currentUser);
+	public void deleteIncident(Long id, CurrentUser currentUser) {
+		Incident incident = getIncidentById(id);
+		ensureCanModify(incident, currentUser);
 
-        incidentRepository.delete(incident);
-    }
+		incidentRepository.delete(incident);
+	}
 
-    private void ensureCanModify(Incident incident, CurrentUser currentUser) {
-        if (currentUser.admin()) {
-            return;
-        }
+	private void ensureCanModify(Incident incident, CurrentUser currentUser) {
+		if (currentUser.admin()) {
+			return;
+		}
 
-        AppUser reporter = incident.getReporter();
-        if (reporter != null && reporter.getId().equals(currentUser.id())) {
-            return;
-        }
+		AppUser reporter = incident.getReporter();
+		if (reporter != null && reporter.getId().equals(currentUser.id())) {
+			return;
+		}
 
-        throw new AccessDeniedException(
-                "Vous n'êtes pas autorisé à modifier cet incident."
-        );
-    }
+		throw new AccessDeniedException("Vous n'êtes pas autorisé à modifier cet incident.");
+	}
 }

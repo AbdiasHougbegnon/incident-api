@@ -20,23 +20,18 @@ import static org.mockito.Mockito.when;
 @ExtendWith(MockitoExtension.class)
 class NotRevokedJwtValidatorTest {
 
-    @Mock
-    private RevokedTokenRepository revokedTokenRepository;
+	@Mock
+	private RevokedTokenRepository revokedTokenRepository;
 
-    @InjectMocks
-    private NotRevokedJwtValidator validator;
+	@InjectMocks
+	private NotRevokedJwtValidator validator;
 
-    private Jwt jwtWithId(String jti) {
-        return Jwt.withTokenValue("test-token")
-                .header("alg", "HS256")
-                .subject("user@example.com")
-                .claim("jti", jti)
-                .issuedAt(Instant.now())
-                .expiresAt(Instant.now().plusSeconds(3600))
-                .build();
-    }
+	private Jwt jwtWithId(String jti) {
+		return Jwt.withTokenValue("test-token").header("alg", "HS256").subject("user@example.com").claim("jti", jti)
+				.issuedAt(Instant.now()).expiresAt(Instant.now().plusSeconds(3600)).build();
+	}
 
-    @Test
+	@Test
     void shouldSucceedWhenTokenIsNotRevoked() {
         when(revokedTokenRepository.existsById("token-id-1")).thenReturn(false);
 
@@ -45,7 +40,7 @@ class NotRevokedJwtValidatorTest {
         assertThat(result.hasErrors()).isFalse();
     }
 
-    @Test
+	@Test
     void shouldFailWhenTokenIsRevoked() {
         when(revokedTokenRepository.existsById("token-id-2")).thenReturn(true);
 

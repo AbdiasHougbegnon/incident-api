@@ -1,2 +1,3 @@
 org.springframework.boot.env.EnvironmentPostProcessor=\
-fr.abdias.incident_api.config.VaultEnvironmentPostProcessor
+fr.abdias.incident_api.config.VaultEnvironmentPostProcessor,\
+fr.abdias.incident_api.config.DatabaseUrlEnvironmentPostProcessor

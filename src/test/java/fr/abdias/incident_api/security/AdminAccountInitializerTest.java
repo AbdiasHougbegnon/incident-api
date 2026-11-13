@@ -20,13 +20,13 @@ import static org.mockito.Mockito.*;
 @ExtendWith(MockitoExtension.class)
 class AdminAccountInitializerTest {
 
-    @Mock
-    private AppUserRepository appUserRepository;
+	@Mock
+	private AppUserRepository appUserRepository;
 
-    @Mock
-    private PasswordEncoder passwordEncoder;
+	@Mock
+	private PasswordEncoder passwordEncoder;
 
-    @Test
+	@Test
     void shouldCreateAdminWhenCredentialsProvidedAndNoAdminExists() {
         when(appUserRepository.existsByRole(AppRole.ADMIN)).thenReturn(false);
         when(passwordEncoder.encode("SuperSecret123!")).thenReturn("encoded");
@@ -45,7 +45,7 @@ class AdminAccountInitializerTest {
         assertThat(saved.getRole()).isEqualTo(AppRole.ADMIN);
     }
 
-    @Test
+	@Test
     void shouldSkipWhenAdminAlreadyExists() {
         when(appUserRepository.existsByRole(AppRole.ADMIN)).thenReturn(true);
 
@@ -57,14 +57,13 @@ class AdminAccountInitializerTest {
         verify(appUserRepository, never()).save(any(AppUser.class));
     }
 
-    @Test
-    void shouldSkipWhenCredentialsAreNotConfigured() {
-        AdminAccountInitializer initializer = new AdminAccountInitializer(
-                appUserRepository, passwordEncoder, "", "");
+	@Test
+	void shouldSkipWhenCredentialsAreNotConfigured() {
+		AdminAccountInitializer initializer = new AdminAccountInitializer(appUserRepository, passwordEncoder, "", "");
 
-        initializer.run(null);
+		initializer.run(null);
 
-        verify(appUserRepository, never()).existsByRole(any());
-        verify(appUserRepository, never()).save(any(AppUser.class));
-    }
+		verify(appUserRepository, never()).existsByRole(any());
+		verify(appUserRepository, never()).save(any(AppUser.class));
+	}
 }

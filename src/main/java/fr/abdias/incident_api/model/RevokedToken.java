@@ -19,10 +19,10 @@ import lombok.NoArgsConstructor;
 @AllArgsConstructor
 public class RevokedToken {
 
-    @Id
-    @Column(length = 36)
-    private String jti;
+	@Id
+	@Column(length = 36)
+	private String jti;
 
-    @Column(name = "expires_at", nullable = false)
-    private Instant expiresAt;
+	@Column(name = "expires_at", nullable = false)
+	private Instant expiresAt;
 }

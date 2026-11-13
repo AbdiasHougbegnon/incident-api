@@ -13,22 +13,16 @@ import static org.assertj.core.api.Assertions.assertThat;
 
 class JwtConfigTest {
 
-    @Test
-    void shouldMapRoleClaimToPrefixedAuthority() {
-        JwtAuthenticationConverter converter = new JwtConfig().jwtAuthenticationConverter();
+	@Test
+	void shouldMapRoleClaimToPrefixedAuthority() {
+		JwtAuthenticationConverter converter = new JwtConfig().jwtAuthenticationConverter();
 
-        Jwt jwt = Jwt.withTokenValue("token")
-                .header("alg", "HS256")
-                .subject("admin@example.com")
-                .issuedAt(Instant.now())
-                .expiresAt(Instant.now().plusSeconds(60))
-                .claims(claims -> claims.putAll(Map.of("role", "ADMIN")))
-                .build();
+		Jwt jwt = Jwt.withTokenValue("token").header("alg", "HS256").subject("admin@example.com")
+				.issuedAt(Instant.now()).expiresAt(Instant.now().plusSeconds(60))
+				.claims(claims -> claims.putAll(Map.of("role", "ADMIN"))).build();
 
-        JwtAuthenticationToken authentication = (JwtAuthenticationToken) converter.convert(jwt);
+		JwtAuthenticationToken authentication = (JwtAuthenticationToken) converter.convert(jwt);
 
-        assertThat(authentication.getAuthorities())
-                .extracting(Object::toString)
-                .contains("ROLE_ADMIN");
-    }
+		assertThat(authentication.getAuthorities()).extracting(Object::toString).contains("ROLE_ADMIN");
+	}
 }

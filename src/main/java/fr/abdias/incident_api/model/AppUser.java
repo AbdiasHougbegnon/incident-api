@@ -24,25 +24,25 @@ import lombok.Setter;
 @NoArgsConstructor
 public class AppUser {
 
-    @Id
-    @GeneratedValue(strategy = GenerationType.IDENTITY)
-    private Long id;
+	@Id
+	@GeneratedValue(strategy = GenerationType.IDENTITY)
+	private Long id;
 
-    @Column(nullable = false, unique = true, length = 254)
-    private String email;
+	@Column(nullable = false, unique = true, length = 254)
+	private String email;
 
-    @Column(name = "password_hash", nullable = false)
-    private String passwordHash;
+	@Column(name = "password_hash", nullable = false)
+	private String passwordHash;
 
-    @Enumerated(EnumType.STRING)
-    @Column(nullable = false, length = 30)
-    private AppRole role = AppRole.USER;
+	@Enumerated(EnumType.STRING)
+	@Column(nullable = false, length = 30)
+	private AppRole role = AppRole.USER;
 
-    @Column(nullable = false, updatable = false)
-    private Instant createdAt;
+	@Column(nullable = false, updatable = false)
+	private Instant createdAt;
 
-    @PrePersist
-    protected void onCreate() {
-        createdAt = Instant.now();
-    }
+	@PrePersist
+	protected void onCreate() {
+		createdAt = Instant.now();
+	}
 }

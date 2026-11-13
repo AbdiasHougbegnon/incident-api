@@ -17,63 +17,47 @@ import org.springframework.security.web.authentication.UsernamePasswordAuthentic
 @Configuration
 public class SecurityConfig {
 
-    private final JwtAuthenticationConverter jwtAuthenticationConverter;
-    private final RateLimitingFilter rateLimitingFilter;
+	private final JwtAuthenticationConverter jwtAuthenticationConverter;
+	private final RateLimitingFilter rateLimitingFilter;
 
-    public SecurityConfig(
-            JwtAuthenticationConverter jwtAuthenticationConverter,
-            RateLimitingFilter rateLimitingFilter) {
-        this.jwtAuthenticationConverter = jwtAuthenticationConverter;
-        this.rateLimitingFilter = rateLimitingFilter;
-    }
+	public SecurityConfig(JwtAuthenticationConverter jwtAuthenticationConverter,
+			RateLimitingFilter rateLimitingFilter) {
+		this.jwtAuthenticationConverter = jwtAuthenticationConverter;
+		this.rateLimitingFilter = rateLimitingFilter;
+	}
 
-    /**
-     * Les endpoints Actuator vivent sur le port de gestion separe (9001,
-     * non expose a l'hote) : l'isolation reseau est leur mecanisme de
-     * protection, pas une authentification applicative (un scraper Prometheus
-     * ne peut pas se reconnecter avec un JWT qui expire toutes les heures).
-     * Sans cette chaine dediee, Spring Boot applique par defaut sa propre
-     * securite restrictive au contexte de gestion (ManagementWebSecurityAutoConfiguration).
-     */
-    @Bean
-    @Order(1)
-    public SecurityFilterChain managementSecurityFilterChain(HttpSecurity http) throws Exception {
-        http
-            .securityMatcher(EndpointRequest.toAnyEndpoint())
-            .authorizeHttpRequests(authorize -> authorize.anyRequest().permitAll())
-            .csrf(AbstractHttpConfigurer::disable);
+	/**
+	 * Les endpoints Actuator vivent sur le port de gestion separe (9001, non expose
+	 * a l'hote) : l'isolation reseau est leur mecanisme de protection, pas une
+	 * authentification applicative (un scraper Prometheus ne peut pas se
+	 * reconnecter avec un JWT qui expire toutes les heures). Sans cette chaine
+	 * dediee, Spring Boot applique par defaut sa propre securite restrictive au
+	 * contexte de gestion (ManagementWebSecurityAutoConfiguration).
+	 */
+	@Bean
+	@Order(1)
+	public SecurityFilterChain managementSecurityFilterChain(HttpSecurity http) throws Exception {
+		http.securityMatcher(EndpointRequest.toAnyEndpoint())
+				.authorizeHttpRequests(authorize -> authorize.anyRequest().permitAll())
+				.csrf(AbstractHttpConfigurer::disable);
 
-        return http.build();
-    }
+		return http.build();
+	}
 
-    @Bean
-    @Order(2)
-    public SecurityFilterChain securityFilterChain(HttpSecurity http)
-            throws Exception {
+	@Bean
+	@Order(2)
+	public SecurityFilterChain securityFilterChain(HttpSecurity http) throws Exception {
 
-        http
-            .csrf(AbstractHttpConfigurer::disable)
-            .formLogin(AbstractHttpConfigurer::disable)
-            .httpBasic(AbstractHttpConfigurer::disable)
-            .sessionManagement(session ->
-                session.sessionCreationPolicy(SessionCreationPolicy.STATELESS)
-            )
-            .authorizeHttpRequests(authorize -> authorize
-                .requestMatchers(
-                    "/api/auth/register",
-                    "/api/auth/login",
-                    "/swagger-ui/**",
-                    "/v3/api-docs/**"
-                ).permitAll()
-                .anyRequest().authenticated()
-            )
-            .oauth2ResourceServer(oauth2 ->
-                oauth2.jwt(jwt ->
-                    jwt.jwtAuthenticationConverter(jwtAuthenticationConverter)
-                )
-            )
-            .addFilterBefore(rateLimitingFilter, UsernamePasswordAuthenticationFilter.class);
+		http.csrf(AbstractHttpConfigurer::disable).formLogin(AbstractHttpConfigurer::disable)
+				.httpBasic(AbstractHttpConfigurer::disable)
+				.sessionManagement(session -> session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
+				.authorizeHttpRequests(authorize -> authorize
+						.requestMatchers("/api/auth/register", "/api/auth/login", "/swagger-ui/**", "/v3/api-docs/**")
+						.permitAll().anyRequest().authenticated())
+				.oauth2ResourceServer(
+						oauth2 -> oauth2.jwt(jwt -> jwt.jwtAuthenticationConverter(jwtAuthenticationConverter)))
+				.addFilterBefore(rateLimitingFilter, UsernamePasswordAuthenticationFilter.class);
 
-        return http.build();
-    }
+		return http.build();
+	}
 }

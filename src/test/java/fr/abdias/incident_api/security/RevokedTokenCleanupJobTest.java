@@ -18,21 +18,21 @@ import static org.mockito.Mockito.verify;
 @ExtendWith(MockitoExtension.class)
 class RevokedTokenCleanupJobTest {
 
-    @Mock
-    private RevokedTokenRepository revokedTokenRepository;
+	@Mock
+	private RevokedTokenRepository revokedTokenRepository;
 
-    @InjectMocks
-    private RevokedTokenCleanupJob cleanupJob;
+	@InjectMocks
+	private RevokedTokenCleanupJob cleanupJob;
 
-    @Test
-    void shouldDeleteEntriesExpiredBeforeNow() {
-        Instant before = Instant.now();
+	@Test
+	void shouldDeleteEntriesExpiredBeforeNow() {
+		Instant before = Instant.now();
 
-        cleanupJob.purgeExpiredEntries();
+		cleanupJob.purgeExpiredEntries();
 
-        ArgumentCaptor<Instant> captor = ArgumentCaptor.forClass(Instant.class);
-        verify(revokedTokenRepository).deleteByExpiresAtBefore(captor.capture());
+		ArgumentCaptor<Instant> captor = ArgumentCaptor.forClass(Instant.class);
+		verify(revokedTokenRepository).deleteByExpiresAtBefore(captor.capture());
 
-        assertThat(captor.getValue()).isAfterOrEqualTo(before);
-    }
+		assertThat(captor.getValue()).isAfterOrEqualTo(before);
+	}
 }
