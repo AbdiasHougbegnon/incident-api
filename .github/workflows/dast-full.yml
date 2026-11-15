@@ -1,0 +1,38 @@
+name: DAST full scan
+
+on:
+  schedule:
+    - cron: '0 3 * * 0'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  zap-full-scan:
+    name: OWASP ZAP full scan
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v6
+
+      - name: Generate ephemeral secrets
+        run: |
+          echo "DB_PASSWORD=$(openssl rand -hex 16)" >> .env
+          echo "JWT_SECRET=$(openssl rand -base64 32)" >> .env
+          echo "VAULT_DEV_ROOT_TOKEN=$(openssl rand -hex 16)" >> .env
+
+      - name: Start the application
+        run: docker compose up -d --build app
+
+      - name: Wait for the application to be ready
+        run: |
+          for i in $(seq 1 30); do
+            curl -sf http://localhost:8080/v3/api-docs && break
+            sleep 5
+          done
+
+      - name: Run ZAP full scan
+        uses: zaproxy/action-full-scan@v0.12.0
+        with:
+          target: 'http://localhost:8080'
