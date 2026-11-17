@@ -5,6 +5,7 @@ plugins {
     id("io.spring.dependency-management") version "1.1.7"
     id("com.diffplug.spotless") version "6.25.0"
     id("org.sonarqube") version "5.1.0.4882"
+    id("org.cyclonedx.bom") version "1.10.0"
 }
 
 group = "fr.abdias"
@@ -44,6 +45,12 @@ sonar {
 		property("sonar.organization", "abdiashougbegnon")
 		property("sonar.host.url", "https://sonarcloud.io")
 	}
+}
+
+tasks.cyclonedxBom {
+	setIncludeConfigs(listOf("runtimeClasspath"))
+	setOutputFormat("json")
+	setOutputName("bom")
 }
 
 dependencies {
