@@ -7,7 +7,7 @@ COPY build.gradle.kts settings.gradle.kts ./
 RUN chmod +x gradlew
 
 COPY src ./src
-RUN ./gradlew --no-daemon bootJar -x test
+RUN bash -c 'for i in 1 2 3 4 5; do ./gradlew --no-daemon bootJar -x test && exit 0; echo "Tentative $i echouee, nouvelle tentative dans 15s..."; sleep 15; done; exit 1'
 
 FROM eclipse-temurin:25-jre AS runtime
 WORKDIR /app
