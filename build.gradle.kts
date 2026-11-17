@@ -4,7 +4,7 @@ plugins {
     id("org.springframework.boot") version "4.1.2"
     id("io.spring.dependency-management") version "1.1.7"
     id("com.diffplug.spotless") version "6.25.0"
-    id("org.sonarqube") version "5.1.0.4882"
+    id("org.sonarqube") version "7.5.0.8588"
     id("org.cyclonedx.bom") version "1.10.0"
 }
 
