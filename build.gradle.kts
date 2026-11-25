@@ -74,7 +74,7 @@ dependencies {
 	runtimeOnly("org.postgresql:postgresql")
 	implementation("com.azure:azure-identity")
 	implementation("com.azure:azure-security-keyvault-secrets")
-	implementation("org.springdoc:springdoc-openapi-starter-webmvc-ui:3.0.0")
+	implementation("org.springdoc:springdoc-openapi-starter-webmvc-ui:3.2.0")
 	annotationProcessor("org.projectlombok:lombok")
 	testRuntimeOnly("com.h2database:h2")
 	testImplementation("org.springframework.boot:spring-boot-starter-data-jpa-test")
