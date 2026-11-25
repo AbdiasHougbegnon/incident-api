@@ -100,7 +100,11 @@ Ces variables ne sont définies que dans la session PowerShell en cours. Ne jama
 
 Sans `VAULT_ADDR`/`VAULT_TOKEN` définis, l'application ignore totalement Vault et lit les secrets directement dans les variables d'environnement, comme ci-dessus — pratique pour développer sans lancer toute la stack Docker.
 
-## Gestion des secrets avec HashiCorp Vault
+## Gestion des secrets
+
+Deux chemins coexistent dans le code, chacun déclenché par une variable d'environnement différente — jamais les deux en même temps dans un environnement donné. En développement local (`docker-compose`), c'est HashiCorp Vault (mode dev). En production sur Azure, c'est Azure Key Vault (voir plus bas).
+
+### HashiCorp Vault (développement local)
 
 En conteneur (`docker-compose`), les secrets ne sont plus transmis en clair à l'application : ils sont stockés dans Vault, et l'application va les chercher elle-même au tout début de son démarrage.
 
@@ -120,6 +124,14 @@ Le conteneur `vault` tourne en **mode développement** (`hashicorp/vault` avec `
 - **jeton root fixe, sans TLS** — en prod, l'authentification doit utiliser une méthode à privilège limité (AppRole, Kubernetes auth...) plutôt qu'un jeton root permanent, et toutes les communications doivent être chiffrées (TLS).
 
 Pour une vraie mise en production : un backend de stockage persistant (Raft intégré, ou Consul), un vrai processus de scellement/déverrouillage, l'authentification AppRole, et TLS de bout en bout. C'est un projet à part entière, pas une simple option à activer.
+
+### Azure Key Vault (production)
+
+Sur la VM Azure, les secrets ne viennent plus de Vault mais d'**Azure Key Vault**, via le même mécanisme (`AzureKeyVaultEnvironmentPostProcessor`, un `EnvironmentPostProcessor` Spring Boot) déclenché par la variable `AZURE_KEY_VAULT_URI` au lieu de `VAULT_ADDR`/`VAULT_TOKEN`. Il lit les mêmes noms de secrets (`db-password`, `jwt-secret`, `admin-email`, `admin-password`) et les injecte sous les mêmes noms de propriétés (`DB_PASSWORD`, `JWT_SECRET`, ...), donc le reste de l'application ne sait pas d'où viennent ses secrets.
+
+La différence importante est l'authentification : au lieu d'un jeton root fixe stocké sur la machine (le défaut de Vault en mode dev, voir ci-dessus), la VM s'authentifie via une **Managed Identity** Azure AD — une identité attribuée directement à la VM, sans aucun mot de passe/clé stocké nulle part. Le SDK (`DefaultAzureCredential`) la résout automatiquement quand le code tourne sur Azure. La VM doit avoir le rôle RBAC **`Key Vault Secrets User`** (pas `Administrator`, pour limiter les dégâts si la VM était compromise) sur le Key Vault. En local ou en CI, cette résolution échoue proprement (aucune Managed Identity disponible), et le post-processor retombe silencieusement sur les variables d'environnement classiques — exactement comme pour Vault.
+
+C'est strictement plus robuste que le mode dev de Vault : pas de jeton permanent, pas de stockage en mémoire volatile, authentification gérée par Azure AD plutôt que par un secret applicatif.
 
 ## Documentation OpenAPI
 
@@ -366,11 +378,38 @@ Une fois actif, même un push direct sur `master` sera refusé par GitHub — to
 
 Le principe suivi est *"build once, promote"* : la même image Docker est déployée d'abord en staging, puis — après validation manuelle — promue en prod sans être reconstruite. Voir la section suivante.
 
-## Déploiement en production : VM Oracle Cloud Always Free
+## Déploiement en production : Azure (services managés)
 
-Choix retenu après un essai infructueux sur Fly.io (base Postgres "unmanaged" qui s'endort de façon imprévisible sur le tier gratuit, peu adapté à un lien de portfolio qui doit toujours répondre) : une **VM Oracle Cloud Ampere A1 (ARM)**, gratuite à vie (jusqu'à 4 OCPU / 24 Go de RAM), sans "scale to zero" — elle ne s'éteint jamais toute seule.
+Choix retenu après un essai infructueux sur Fly.io (base Postgres "unmanaged" qui s'endort de façon imprévisible sur le tier gratuit) et une inscription Oracle Cloud restée bloquée (voir section suivante, conservée pour référence) : un abonnement **Azure for Students** actif, avec des quotas gratuits largement suffisants pour ce projet (VM `Standard_B2ats_v2`/`B2pts_v2` 750h/mois pendant 12 mois, PostgreSQL Flexible Server B1MS 750h/mois, Key Vault et Container Registry Standard gratuits en permanence ou 12 mois selon le service).
 
-Le déploiement reste **manuel** pour l'instant (pas de pipeline CI/CD automatisé vers cette VM) :
+Contrairement au plan Oracle (portage à l'identique du `docker-compose.yml`), cette option remplace deux services auto-hébergés par leurs équivalents managés Azure :
+- **PostgreSQL** → Azure Database for PostgreSQL Flexible Server (TLS obligatoire, sauvegardes automatiques).
+- **HashiCorp Vault (mode dev)** → Azure Key Vault + Managed Identity (voir [section secrets](#gestion-des-secrets) ci-dessus) — élimine le jeton root fixe.
+
+Le fichier `docker-compose.azure.yml` (séparé de `docker-compose.yml`, qui reste inchangé pour le développement local) ne contient plus que `app` (image tirée d'Azure Container Registry), `prometheus` et `grafana`.
+
+**Étapes manuelles (CLI `az`), dans l'ordre :**
+
+1. **Resource group** : `az group create --name rg-incident-api --location francecentral`.
+2. **PostgreSQL Flexible Server** : `az postgres flexible-server create` (SKU `Standard_B1ms`, tier `Burstable`, 32 Go, version 16), puis créer la base `incidentdb` et une règle de pare-feu limitée à l'IP publique **statique** de la VM (réserver l'IP statique avant de créer cette règle, sinon elle casse au redémarrage de la VM).
+3. **Key Vault** : `az keyvault create` (SKU `standard`), puis `az keyvault secret set` pour les 4 secrets `db-password`, `jwt-secret`, `admin-email`, `admin-password`.
+4. **Container Registry** : `az acr create` (SKU `Standard`, 100 Go).
+5. **VM** : `az vm create`, taille exacte **`Standard_B2ats_v2`** (ou `B2pts_v2` — l'onglet "Education" du portail affiche parfois `B1s` par erreur, ce n'est pas la bonne taille gratuite), IP publique statique, **Managed Identity système activée** (`az vm identity assign`).
+6. **Rôle RBAC `Key Vault Secrets User`** (pas `Administrator`) attribué à l'identité managée de la VM, scope = le Key Vault. La propagation peut prendre jusqu'à 10 minutes.
+7. **Rôle RBAC `AcrPull`** attribué à la même identité managée, scope = l'ACR.
+8. **Règles réseau (NSG)** : ouvrir `8080` (app) et `3000` (Grafana) ; `22` (SSH) restreint à ton IP ; ne **pas** ouvrir `9001` (gestion/Prometheus, interne au réseau Docker) ni `5432` (la base est sur Flexible Server, pas sur la VM).
+9. **Federated credential** Azure AD liée à ce dépôt GitHub (`az ad app federated-credential create`) pour l'authentification OIDC du pipeline CI (voir ci-dessous) — sans ça, `deploy-acr.yml` échoue à l'étape de connexion Azure.
+10. Sur la VM : installer Docker + Compose, `az login --identity` puis `az acr login --name <acr>`, copier `docker-compose.azure.yml` + `monitoring/` + un `.env` minimal (uniquement des valeurs non sensibles : `ACR_LOGIN_SERVER`, `IMAGE_TAG`, `PG_FLEXIBLE_SERVER_FQDN`, `DB_USERNAME`, `AZURE_KEY_VAULT_URI`, `GRAFANA_ADMIN_PASSWORD`), puis `docker compose -f docker-compose.azure.yml up -d`.
+
+**Pipeline CI/CD (`.github/workflows/deploy-acr.yml`)** : se déclenche sur chaque push sur `master` (jamais sur une pull request, pour ne jamais exécuter de code venant d'un fork avec accès aux secrets), reconstruit l'image, la teste (`./gradlew clean check`) et la scanne (Trivy) exactement comme `ci.yml`, puis la pousse vers Azure Container Registry via une authentification **OIDC fédérée** (pas de mot de passe stocké sur GitHub : `AZURE_CLIENT_ID`/`AZURE_TENANT_ID`/`AZURE_SUBSCRIPTION_ID` en secrets, plus `ACR_NAME`/`ACR_LOGIN_SERVER`). Le déploiement effectif sur la VM (pull de la nouvelle image + redémarrage) reste **manuel**, comme pour le plan Oracle ci-dessous — pas d'auto-déploiement SSH.
+
+## Déploiement en production : VM Oracle Cloud Always Free (non retenu)
+
+Plan initial, techniquement valable mais **non retenu** : l'inscription Oracle Cloud s'est révélée bloquée pour l'utilisateur. Conservé ici pour référence plutôt que supprimé.
+
+Choix qui avait été retenu après un essai infructueux sur Fly.io (base Postgres "unmanaged" qui s'endort de façon imprévisible sur le tier gratuit, peu adapté à un lien de portfolio qui doit toujours répondre) : une **VM Oracle Cloud Ampere A1 (ARM)**, gratuite à vie (jusqu'à 4 OCPU / 24 Go de RAM), sans "scale to zero" — elle ne s'éteint jamais toute seule.
+
+Le déploiement serait resté **manuel** (pas de pipeline CI/CD automatisé vers cette VM) :
 
 1. Créer la VM (console OCI : `Compute > Instances > Create Instance`, image Ubuntu, forme `VM.Standard.A1.Flex`, clé SSH téléchargée).
 2. Ouvrir le port `8080` (et `3000` pour Grafana si besoin) dans la liste de sécurité du sous-réseau.
@@ -378,11 +417,11 @@ Le déploiement reste **manuel** pour l'instant (pas de pipeline CI/CD automatis
 4. Copier ce dépôt (ou au minimum `Dockerfile`, `docker-compose.yml`, `backup/`, `vault/`, `monitoring/`, `.env`) sur la VM.
 5. `docker compose up -d` — exactement la même commande qu'en local.
 
-Rien n'empêche d'automatiser cette étape plus tard (ex. une action GitHub qui se connecte en SSH et relance `docker compose pull && docker compose up -d` après chaque push sur `master`).
-
 ## Haute disponibilité de la base de données
 
 Volontairement **non implémenté** ici (documentation seulement) : une seule instance PostgreSQL tourne, sans réplication ni bascule automatique — un point de défaillance unique. C'est un choix délibéré : le chantier est lourd pour un gain limité sur un projet sans trafic réel à protéger aujourd'hui.
+
+Azure Database for PostgreSQL Flexible Server propose une option de haute disponibilité "zone-redundant" (bascule automatique entre zones de disponibilité), mais elle est payante et n'est pas activée ici — hors budget du crédit étudiant Azure for Students. Le choix délibéré ci-dessus reste donc valable même en production Azure : une seule instance, sauvegardée automatiquement par le service managé, mais sans failover automatique.
 
 Ce qu'il faudrait pour une vraie haute disponibilité :
 - **Réplication en streaming** : une ou plusieurs instances PostgreSQL "replica" recevant en continu les changements du primaire (lecture seule, utile aussi pour répartir la charge de lecture).

@@ -25,6 +25,12 @@ springBoot {
 	buildInfo()
 }
 
+dependencyManagement {
+	imports {
+		mavenBom("com.azure:azure-sdk-bom:1.3.10")
+	}
+}
+
 spotless {
 	java {
 		target("src/*/java/**/*.java")
@@ -66,6 +72,8 @@ dependencies {
 	compileOnly("org.projectlombok:lombok")
 	developmentOnly("org.springframework.boot:spring-boot-devtools")
 	runtimeOnly("org.postgresql:postgresql")
+	implementation("com.azure:azure-identity")
+	implementation("com.azure:azure-security-keyvault-secrets")
 	implementation("org.springdoc:springdoc-openapi-starter-webmvc-ui:3.0.0")
 	annotationProcessor("org.projectlombok:lombok")
 	testRuntimeOnly("com.h2database:h2")
